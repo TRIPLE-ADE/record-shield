@@ -1,4 +1,4 @@
-import { CheckCircle, Question, ShieldWarning } from "@phosphor-icons/react";
+import { CheckCircleIcon, QuestionIcon, ShieldWarningIcon } from "@phosphor-icons/react";
 import { StatusBadge } from "./status-badge";
 
 type IntegrityState = "verified" | "unknown" | "invalid";
@@ -8,26 +8,26 @@ const states: Record<
   {
     label: string;
     description: string;
-    icon: typeof CheckCircle;
+    icon: typeof CheckCircleIcon;
     tone: "success" | "warning" | "critical";
   }
 > = {
   verified: {
     label: "Verified",
     description: "Hash links match the checkpoint",
-    icon: CheckCircle,
+    icon: CheckCircleIcon,
     tone: "success",
   },
   unknown: {
     label: "Unknown",
     description: "Verification has not run yet",
-    icon: Question,
+    icon: QuestionIcon,
     tone: "warning",
   },
   invalid: {
     label: "Integrity failure",
     description: "Sequence 18 does not match",
-    icon: ShieldWarning,
+    icon: ShieldWarningIcon,
     tone: "critical",
   },
 };

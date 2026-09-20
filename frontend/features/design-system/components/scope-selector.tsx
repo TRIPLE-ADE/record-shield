@@ -1,5 +1,8 @@
+"use client";
+
 import { useId } from "react";
-import { Check, LockKey } from "@phosphor-icons/react";
+import { useController, useFormContext } from "react-hook-form";
+import { CheckIcon, LockKeyIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { SensitivityBadge, type Sensitivity } from "./sensitivity-badge";
 
@@ -12,15 +15,20 @@ type ScopeOption = {
 
 type ScopeSelectorProps = {
   options: ScopeOption[];
-  selected: string[];
-  onChange: (next: string[]) => void;
 };
 
-export function ScopeSelector({ options, selected, onChange }: ScopeSelectorProps) {
+type ScopeFormValues = { domains: string[] };
+
+export function ScopeSelector({ options }: ScopeSelectorProps) {
   const groupId = useId();
+  const { control } = useFormContext<ScopeFormValues>();
+  const { field } = useController({ name: "domains", control });
+  const selected = Array.isArray(field.value) ? field.value : [];
 
   function toggleScope(id: string) {
-    onChange(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]);
+    field.onChange(
+      selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id],
+    );
   }
 
   return (
@@ -53,7 +61,7 @@ export function ScopeSelector({ options, selected, onChange }: ScopeSelectorProp
                   onChange={() => toggleScope(option.id)}
                   className="peer absolute inset-0 cursor-pointer opacity-0"
                 />
-                <Check
+                <CheckIcon
                   aria-hidden="true"
                   className="size-3.5 scale-0 text-primary transition-transform peer-checked:scale-100"
                   strokeWidth={3}
@@ -69,7 +77,10 @@ export function ScopeSelector({ options, selected, onChange }: ScopeSelectorProp
                 </span>
               </span>
               {isRestricted ? (
-                <LockKey aria-hidden="true" className="mt-0.5 size-4 text-sensitivity-restricted" />
+                <LockKeyIcon
+                  aria-hidden="true"
+                  className="mt-0.5 size-4 text-sensitivity-restricted"
+                />
               ) : null}
             </label>
           );

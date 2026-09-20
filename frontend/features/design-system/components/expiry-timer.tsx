@@ -1,4 +1,4 @@
-import { Timer } from "@phosphor-icons/react";
+import { TimerIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 type ExpiryTimerProps = {
@@ -18,7 +18,7 @@ export function ExpiryTimer({
     <div className="space-y-2" aria-label={`${label}: ${value}`}>
       <div className="flex items-center justify-between gap-3 text-xs">
         <span className="flex items-center gap-1.5 text-muted-foreground">
-          <Timer aria-hidden="true" className="size-3.5" />
+          <TimerIcon aria-hidden="true" className="size-3.5" />
           {label}
         </span>
         <time

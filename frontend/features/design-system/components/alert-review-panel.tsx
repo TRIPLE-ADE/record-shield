@@ -1,4 +1,4 @@
-import { Warning, Check, Clock } from "@phosphor-icons/react";
+import { WarningIcon, CheckIcon, ClockIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "./status-badge";
 
@@ -19,7 +19,7 @@ export function AlertReviewPanel({ alert, reviewed, onReview }: AlertReviewPanel
     <div className="rounded-xl border border-severity-high/25 bg-severity-high/6 p-4">
       <div className="flex items-start gap-3">
         <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-severity-high/12 text-severity-high">
-          <Warning aria-hidden="true" className="size-4" />
+          <WarningIcon aria-hidden="true" className="size-4" />
         </div>
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -31,7 +31,7 @@ export function AlertReviewPanel({ alert, reviewed, onReview }: AlertReviewPanel
           <p className="text-sm leading-6 text-muted-foreground">{alert.description}</p>
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock aria-hidden="true" className="size-3.5" />
+              <ClockIcon aria-hidden="true" className="size-3.5" />
               {alert.age}
             </span>
             <Button
@@ -40,7 +40,7 @@ export function AlertReviewPanel({ alert, reviewed, onReview }: AlertReviewPanel
               onClick={onReview}
               disabled={reviewed}
             >
-              {reviewed ? <Check aria-hidden="true" /> : null}
+              {reviewed ? <CheckIcon aria-hidden="true" /> : null}
               {reviewed ? "Review recorded" : "Review alert"}
             </Button>
           </div>

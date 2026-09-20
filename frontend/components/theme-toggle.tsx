@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { Moon, Sun } from "@phosphor-icons/react";
+import { MoonIcon, SunIcon } from "@phosphor-icons/react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 
@@ -26,7 +26,7 @@ export function ThemeToggle() {
       size="icon"
       onClick={() => setTheme(isDark ? "light" : "dark")}
     >
-      {isDark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+      {isDark ? <SunIcon aria-hidden="true" /> : <MoonIcon aria-hidden="true" />}
     </Button>
   );
 }

@@ -1,28 +1,23 @@
 import { expect, test } from "@playwright/test";
 
-test("workspace surfaces trusted context and safety states", async ({ page }) => {
+test("home keeps the product foundation intentionally simple", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveTitle("RecordShield · Clinical trust layer");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Review care context with confidence.",
+    "A calmer way to build clinical trust.",
   );
-  await expect(page.getByText("Synthetic environment · no real patient data")).toBeVisible();
-
-  await page.locator('[data-slot="button"]').filter({ hasText: "Denied" }).click();
-  await expect(page.getByText("This scope is not available")).toBeVisible();
-  await expect(page.getByText("No clinical payload was returned.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Open design system/i })).toBeVisible();
+  await expect(page.getByText("No live patient data")).toBeVisible();
 });
 
 test("design system is available as a separate preview route", async ({ page }) => {
   await page.goto("/design-system");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "A quiet system for high-stakes decisions.",
-  );
-  await expect(page.getByText("Component preview · representative states only")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Small parts. Clear states.");
+  await expect(page.getByText("Component reference · representative states only")).toBeVisible();
 });
 
 test("restricted disclosure requires a necessity narrative", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/design-system");
 
   await page.locator('[data-slot="button"]').filter({ hasText: "Request specific domain" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();

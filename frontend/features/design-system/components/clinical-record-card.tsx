@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { FileText } from "@phosphor-icons/react";
+import { FileTextIcon } from "@phosphor-icons/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SensitivityBadge, type Sensitivity } from "./sensitivity-badge";
 import { SourceProvenance } from "./source-provenance";
@@ -35,7 +35,7 @@ export function ClinicalRecordCard({
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary text-secondary-foreground">
-              <FileText aria-hidden="true" className="size-4" />
+              <FileTextIcon aria-hidden="true" className="size-4" />
             </div>
             <div className="min-w-0 space-y-1">
               <p className="text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">

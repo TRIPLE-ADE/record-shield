@@ -44,6 +44,7 @@ The App Router remains a thin route composition layer. Feature modules own page 
 ```text
 app/
   page.tsx                              # re-export only
+  design-system/page.tsx                # re-export features/design-system
   (auth)/login/page.tsx                 # re-export features/auth
   (workspace)/workspace/page.tsx        # re-export features/workspace
   (workspace)/patients/[id]/page.tsx    # re-export features/patient-records
@@ -84,15 +85,17 @@ Each feature follows the same shape:
 
 ```text
 features/<feature>/
-  page.tsx                               # optional route-level composition
+  index.tsx                              # route-level composition
   components/
   api.ts                                 # query and mutation functions
   schemas.ts                             # Zod request/response schemas
   view-models.ts                         # server data to display model
-  *.test.tsx                             # colocated Vitest Browser Mode tests
+  index.test.tsx                         # colocated Vitest Browser Mode tests
 ```
 
 `components/ui` stays limited to generated or lightly customized shadcn primitives. Product-specific pieces belong in the owning feature so their behavior and tests stay together.
+
+While the design-system review is in progress, `app/page.tsx` renders the small home placeholder from `features/home/index.tsx`. The visual preview at `/design-system` is static by design and does not require an API contract or mock response.
 
 ## 4. Gate 0: design system before product features
 

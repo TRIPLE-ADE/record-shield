@@ -8,12 +8,8 @@ test("communicates the design system purpose and trusted context", async () => {
 
   await expect
     .element(page.getByRole("heading", { level: 1 }))
-    .toHaveTextContent("A quiet system for high-stakes decisions.");
-  await expect
-    .element(page.getByText("Component preview · representative states only"))
-    .toBeVisible();
-  await expect.element(page.getByText("Context enforced")).toBeVisible();
-  await expect.element(page.getByRole("link", { name: "Review patterns" })).toBeVisible();
+    .toHaveTextContent("Small parts. Clear states.");
+  await expect.element(page.getByRole("link", { name: "Review components" })).toBeVisible();
 });
 
 test("shows failure states without exposing clinical content", async () => {

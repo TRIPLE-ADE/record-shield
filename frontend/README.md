@@ -1,6 +1,6 @@
 # RecordShield frontend
 
-RecordShield is a Next.js workspace for reviewable clinical data exchange. The product surface is under `features/home`; the internal component preview is available at `/design-system`.
+RecordShield is a Next.js foundation for a reviewable clinical data exchange product. The home route is intentionally a small placeholder while the shared visual system is being shaped; the component preview is available at `/design-system`.
 
 ## Run locally
 
@@ -11,14 +11,15 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-The browser uses the Axios mock adapter when `NEXT_PUBLIC_API_URL` is empty. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_API_URL` when the service is available; the feature query and response validation remain unchanged.
+The Axios client and mock adapter are ready for the first contract-backed feature. Leave `NEXT_PUBLIC_API_URL` empty while developing locally; set it in `.env.local` when the service is available so feature queries can use the same client without a UI rewrite.
 
 ## Project conventions
 
 - `app/page.tsx` and `app/design-system/page.tsx` are thin route exports.
-- Product code, colocated browser tests, and API query definitions live in `features/`.
+- Feature pages and their colocated browser tests live in `features/*/index.tsx` and `features/*/index.test.tsx`.
 - `e2e/` contains Playwright flows that exercise the running application.
-- Shared visual primitives live in `components/`; API clients, contracts, and mock transport live in `lib/`.
+- Shared visual primitives live in `components/`; API clients, contract schemas, and mock transport live in `lib/`.
+- `docs/RecordShield_API_Contract.md` and `docs/RecordShield_OpenAPI.json` remain the source of truth for every future API-backed feature.
 
 ## Verification
 

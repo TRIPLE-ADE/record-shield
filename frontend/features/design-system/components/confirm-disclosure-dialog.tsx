@@ -1,5 +1,9 @@
-import { useState } from "react";
-import { Warning, LockKey } from "@phosphor-icons/react";
+"use client";
+
+import { zodResolver } from "@hookform/resolvers/zod";
+import { WarningIcon, LockKeyIcon } from "@phosphor-icons/react";
+import { useForm, useWatch } from "react-hook-form";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,21 +19,30 @@ import { Textarea } from "@/components/ui/textarea";
 type ConfirmDisclosureDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
+  onConfirm: (reason: string) => void;
 };
+
+const disclosureSchema = z.object({
+  reason: z.string().trim().min(20).max(1000),
+});
+
+type DisclosureFormValues = z.infer<typeof disclosureSchema>;
 
 export function ConfirmDisclosureDialog({
   open,
   onOpenChange,
   onConfirm,
 }: ConfirmDisclosureDialogProps) {
-  const [reason, setReason] = useState("");
-  const canConfirm = reason.trim().length >= 20;
+  const form = useForm<DisclosureFormValues>({
+    resolver: zodResolver(disclosureSchema),
+    defaultValues: { reason: "" },
+    mode: "onChange",
+  });
+  const reason = useWatch({ control: form.control, name: "reason" }) ?? "";
 
-  function confirm() {
-    if (!canConfirm) return;
-    onConfirm();
-    setReason("");
+  function confirm(values: DisclosureFormValues) {
+    onConfirm(values.reason);
+    form.reset();
   }
 
   return (
@@ -37,7 +50,7 @@ export function ConfirmDisclosureDialog({
       <DialogContent className="max-w-lg" aria-describedby="disclosure-dialog-description">
         <DialogHeader className="pr-7">
           <div className="mb-1 grid size-10 place-items-center rounded-xl bg-emergency/12 text-emergency">
-            <Warning aria-hidden="true" className="size-5" />
+            <WarningIcon aria-hidden="true" className="size-5" />
           </div>
           <DialogTitle>Request a restricted domain</DialogTitle>
           <DialogDescription id="disclosure-dialog-description">
@@ -46,10 +59,10 @@ export function ConfirmDisclosureDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-1">
+        <form className="space-y-4 py-1" onSubmit={form.handleSubmit(confirm)}>
           <div className="rounded-xl border border-emergency/20 bg-emergency/5 p-3 text-sm leading-6 text-muted-foreground">
             <div className="flex items-start gap-2">
-              <LockKey aria-hidden="true" className="mt-1 size-4 shrink-0 text-emergency" />
+              <LockKeyIcon aria-hidden="true" className="mt-1 size-4 shrink-0 text-emergency" />
               <p>
                 <span className="font-semibold text-foreground">HIV status</span> will be added to
                 this 15-minute emergency session.
@@ -62,9 +75,7 @@ export function ConfirmDisclosureDialog({
             </label>
             <Textarea
               id="necessity-narrative"
-              name="necessity-narrative"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
+              {...form.register("reason")}
               placeholder="Describe the immediate treatment decision…"
               minLength={20}
               maxLength={1000}
@@ -76,18 +87,18 @@ export function ConfirmDisclosureDialog({
               <span className="tabular-nums">{reason.length}/1000</span>
             </div>
           </div>
-        </div>
 
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="ghost">
-              Keep current scope
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="ghost">
+                Keep current scope
+              </Button>
+            </DialogClose>
+            <Button type="submit" variant="destructive" disabled={!form.formState.isValid}>
+              Request restricted access
             </Button>
-          </DialogClose>
-          <Button type="button" variant="destructive" disabled={!canConfirm} onClick={confirm}>
-            Request restricted access
-          </Button>
-        </DialogFooter>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

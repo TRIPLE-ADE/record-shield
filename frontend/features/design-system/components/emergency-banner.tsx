@@ -1,4 +1,4 @@
-import { Siren, User } from "@phosphor-icons/react";
+import { SirenIcon, UserIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "./status-badge";
@@ -26,7 +26,7 @@ export function EmergencyBanner({ emergency, onExpand }: EmergencyBannerProps) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
             <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-emergency/12 text-emergency">
-              <Siren aria-hidden="true" className="size-5" />
+              <SirenIcon aria-hidden="true" className="size-5" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -34,7 +34,7 @@ export function EmergencyBanner({ emergency, onExpand }: EmergencyBannerProps) {
                 <StatusBadge tone="emergency">{emergency.level}</StatusBadge>
               </div>
               <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
-                <User aria-hidden="true" className="size-3.5" />
+                <UserIcon aria-hidden="true" className="size-3.5" />
                 {emergency.patient} · {emergency.source}
               </p>
             </div>
