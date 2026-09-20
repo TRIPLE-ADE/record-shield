@@ -1,8 +1,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Header, Request, Response
+from fastapi import APIRouter, Cookie, Depends, Header, Request, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import get_db
 from app.core.errors import ApiError
 from app.schemas.auth import CsrfResponse, LoginRequest, SessionContext
 from app.services.auth import PREAUTH_COOKIE, SESSION_COOKIE, auth_service
@@ -66,11 +68,13 @@ async def login(
     payload: LoginRequest,
     request: Request,
     response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
     x_csrf_token: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
     rs_preauth: Annotated[str | None, Cookie()] = None,
 ) -> SessionContext:
-    session, replayed = auth_service.login(
+    session, replayed = await auth_service.login(
+        db,
         payload.username,
         payload.password,
         payload.membership_id,
@@ -82,7 +86,8 @@ async def login(
     _set_cookie(response, SESSION_COOKIE, session.token, 8 * 60 * 60)
     if not replayed:
         _clear_cookie(response, PREAUTH_COOKIE)
-    return SessionContext(**auth_service.context(session, UUID(request.state.correlation_id)))
+    context = await auth_service.context(db, session, UUID(request.state.correlation_id))
+    return SessionContext(**context)
 
 
 @router.post("/auth/logout", status_code=204)
@@ -99,9 +104,14 @@ async def logout(
 
 
 @router.get("/me", response_model=SessionContext, tags=["me"])
-async def me(request: Request, response: Response) -> SessionContext:
+async def me(
+    request: Request,
+    response: Response,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> SessionContext:
     session = auth_service.get_session(request.cookies.get(SESSION_COOKIE))
     if session is None:
         _clear_cookie(response, SESSION_COOKIE)
         raise ApiError(401, "AUTH_REQUIRED", "Authentication is required.")
-    return SessionContext(**auth_service.context(session, UUID(request.state.correlation_id)))
+    context = await auth_service.context(db, session, UUID(request.state.correlation_id))
+    return SessionContext(**context)

@@ -135,7 +135,6 @@ def upgrade() -> None:
                 "role": "EMERGENCY_DOCTOR",
                 "active": True,
                 "suspended": False,
-                "shift_id": UUID("00000000-0000-4000-8000-000000000017"),
             },
             {
                 "id": UUID("00000000-0000-4000-8000-000000000006"),
@@ -144,7 +143,6 @@ def upgrade() -> None:
                 "role": "ATTENDING_DOCTOR",
                 "active": True,
                 "suspended": False,
-                "shift_id": UUID("00000000-0000-4000-8000-000000000017"),
             },
             {
                 "id": UUID("00000000-0000-4000-8000-000000000011"),
@@ -153,7 +151,6 @@ def upgrade() -> None:
                 "role": "EMERGENCY_DOCTOR",
                 "active": True,
                 "suspended": False,
-                "shift_id": UUID("00000000-0000-4000-8000-000000000017"),
             },
             {
                 "id": UUID("00000000-0000-4000-8000-000000000010"),
@@ -162,7 +159,6 @@ def upgrade() -> None:
                 "role": "TRUST_OPERATOR",
                 "active": True,
                 "suspended": False,
-                "shift_id": None,
             },
         ],
     )

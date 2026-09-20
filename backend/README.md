@@ -151,10 +151,15 @@ Synthetic development accounts all use the password `synthetic-example-password`
 
 | Username | Context |
 | --- | --- |
-| `amina.unity` | Unity Medical emergency doctor |
+| `amina.unity` | Unity Medical emergency doctor; on shift, assigned to Musa in the Emergency Department with `sensitive_access` |
+| `grace.unity` | Unity Medical nurse; on shift, assigned to Musa in the Emergency Department |
+| `kunle.mercy` | Mercy General visiting doctor; on shift, assigned to Musa on the Medical Ward |
+| `john.mercy` | Mercy General clerk; on shift with an organization-wide ADMIN task assignment |
 | `multi.staff` | Staff member with multiple memberships; a valid `membership_id` is required at login |
 | `musa.patient` | Patient portal account for the synthetic Musa record |
 | `trust.operator` | Unity trust-operator context |
+
+Seeded shifts and assignments run from 2026-09-01 to 2026-12-31 UTC. Every request reloads the membership, active shift, care assignments and task assignments from the database; policy denials are recorded in `audit_events` with an internal reason code and returned as a generic 403.
 
 The synthetic auth catalog, sessions, and pre-auth state are currently in process memory. Domain records, consent requests, grants, audit metadata, and idempotency references use the configured database. Do not treat the synthetic auth implementation as production-ready identity infrastructure.
 

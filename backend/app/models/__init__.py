@@ -1,5 +1,6 @@
 from app.models.entities import (
     AuditEvent,
+    CareAssignment,
     ClinicalRecord,
     ClinicalRecordRevision,
     ConsentGrant,
@@ -9,13 +10,16 @@ from app.models.entities import (
     Membership,
     Organization,
     Patient,
+    Shift,
     SourceLink,
+    TaskAssignment,
     User,
     Ward,
 )
 
 __all__ = [
     "AuditEvent",
+    "CareAssignment",
     "ClinicalRecord",
     "ClinicalRecordRevision",
     "ConsentGrant",
@@ -25,7 +29,9 @@ __all__ = [
     "Membership",
     "Organization",
     "Patient",
+    "Shift",
     "SourceLink",
+    "TaskAssignment",
     "User",
     "Ward",
 ]

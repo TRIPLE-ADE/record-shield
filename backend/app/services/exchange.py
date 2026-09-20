@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.api.v1.dependencies import Actor
+from app.core import clock
 from app.core.errors import ApiError
 from app.core.primitives import decode_cursor, encode_cursor, request_fingerprint
 from app.models import (
@@ -18,6 +19,7 @@ from app.models import (
     Organization,
     Patient,
     SourceLink,
+    User,
 )
 from app.schemas.exchange import (
     ApproveConsent,
@@ -28,11 +30,10 @@ from app.schemas.exchange import (
     ExpectedVersion,
 )
 from app.schemas.records import ClinicalRecordView
-from app.services.auth import auth_service
 from app.services.local_workspace import _idempotency, _require_key
+from app.services.policy import DOCTOR_ROLES as PROVIDER_ROLES
 from app.services.source_adapter import source_adapters
 
-PROVIDER_ROLES = {"ATTENDING_DOCTOR", "VISITING_DOCTOR", "EMERGENCY_DOCTOR"}
 EXCHANGE_DOMAINS = {
     "demographics",
     "history",
@@ -51,17 +52,15 @@ EXCHANGE_DOMAINS = {
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    return clock.now()
 
 
 def _z(value: datetime) -> str:
-    return _utc(value).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return clock.z(value)
 
 
 def _utc(value: datetime) -> datetime:
-    if value.tzinfo is None or value.utcoffset() is None:
-        return value.replace(tzinfo=UTC)
-    return value.astimezone(UTC)
+    return clock.utc(value)
 
 
 def _expired(value: datetime) -> bool:
@@ -71,18 +70,18 @@ def _expired(value: datetime) -> bool:
 def _provider(actor: Actor) -> UUID:
     if actor.membership is None or actor.membership.role not in PROVIDER_ROLES:
         raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
-    return actor.membership.organization.id
+    return actor.organization_id
 
 
 def _source_view(source: Organization) -> dict[str, Any]:
     return {"organization_id": source.id, "name": source.name, "mode": source.mode}
 
 
-def _practitioner_name(user_id: UUID) -> str:
-    for user in auth_service.users.values():
-        if user.id == user_id:
-            return "Dr " + user.username.split(".", 1)[0].replace("_", " ").title()
-    return "Practitioner"
+async def practitioner_name(db: AsyncSession, user_id: UUID) -> str:
+    user = await db.get(User, user_id)
+    if user is None:
+        return "Practitioner"
+    return "Dr " + user.username.split(".", 1)[0].replace("_", " ").title()
 
 
 async def _request_parts(
@@ -119,6 +118,7 @@ def request_view(
     request: ConsentRequest,
     source: Organization,
     recipient: Organization,
+    practitioner_name: str = "Practitioner",
 ) -> ConsentRequestView:
     status = request.status
     if status == "PENDING" and _expired(request.expires_at):
@@ -140,12 +140,15 @@ def request_view(
         version=request.version,
         source=_source_view(source),
         recipient=_source_view(recipient),
-        practitioner_name=_practitioner_name(request.requesting_practitioner_id),
+        practitioner_name=practitioner_name,
     )
 
 
 def grant_view(
-    grant: ConsentGrant, source: Organization, recipient: Organization
+    grant: ConsentGrant,
+    source: Organization,
+    recipient: Organization,
+    practitioner_name: str = "Practitioner",
 ) -> ConsentGrantView:
     status = grant.status
     if status == "ACTIVE" and _expired(grant.expires_at):
@@ -165,7 +168,7 @@ def grant_view(
         version=grant.version,
         source=_source_view(source),
         recipient=_source_view(recipient),
-        practitioner_name=_practitioner_name(grant.practitioner_id),
+        practitioner_name=practitioner_name,
     )
 
 
@@ -355,12 +358,13 @@ async def list_consent_requests(
         grant = await db.scalar(
             select(ConsentGrant).where(ConsentGrant.request_id == request.id)
         )
+        name = await practitioner_name(db, request.requesting_practitioner_id)
         grant_value = None
         if grant:
-            grant_value = grant_view(grant, source_org, recipient_org)
+            grant_value = grant_view(grant, source_org, recipient_org, name)
         items.append(
             ConsentRequestStatus(
-                request=request_view(request, source_org, recipient_org),
+                request=request_view(request, source_org, recipient_org, name),
                 grant=grant_value,
             )
         )
@@ -428,7 +432,7 @@ async def approve_consent(
         practitioner_id=request.requesting_practitioner_id,
         domains=selected,
         issued_at=now,
-        expires_at=min(_utc(request.expires_at), now + duration),
+        expires_at=now + duration,
         status="ACTIVE",
         version=1,
     )
@@ -485,7 +489,7 @@ async def transition_request(
         if target_status == "DENIED"
         else actor.user.id == request.requesting_practitioner_id
         and actor.membership is not None
-        and actor.membership.organization.id == request.recipient_org_id
+        and actor.organization_id == request.recipient_org_id
     )
     if not allowed:
         raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
@@ -631,7 +635,7 @@ async def read_remote_records(
         or grant.source_org_id != source_id
         or grant.practitioner_id != actor.user.id
         or actor.membership is None
-        or actor.membership.organization.id != grant.recipient_org_id
+        or actor.organization_id != grant.recipient_org_id
     ):
         raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
     if grant.status == "REVOKED":
@@ -643,7 +647,7 @@ async def read_remote_records(
     if any(domain not in EXCHANGE_DOMAINS for domain in domains):
         raise ApiError(422, "VALIDATION_ERROR", "The requested exchange domain is invalid.")
     if not set(domains).issubset(set(grant.domains)):
-        raise ApiError(403, "SCOPE_DENIED", "The consent grant does not cover this domain.")
+        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
     link = await db.scalar(
         select(SourceLink).where(
             SourceLink.patient_id == patient_id,
@@ -681,6 +685,8 @@ async def read_remote_records(
     await db.refresh(grant)
     if grant.status != "ACTIVE" or _expired(grant.expires_at):
         raise ApiError(403, "GRANT_REVOKED", "The consent grant is no longer active.")
+    if actor.context is None or not actor.context.policy.shift_active:
+        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
     rows = await adapter.read_records(
         patient_id, link.source_local_patient_id, domains, limit + 1, offset
     )

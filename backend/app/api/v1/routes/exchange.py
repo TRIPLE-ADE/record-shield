@@ -25,6 +25,7 @@ from app.services.exchange import (
     discover_sources,
     grant_view,
     list_consent_requests,
+    practitioner_name,
     read_remote_records,
     request_view,
     revoke_consent,
@@ -106,8 +107,9 @@ async def create_request(
     consent_request, source, recipient = await create_consent_request(
         db, actor, payload, idempotency_key
     )
+    name = await practitioner_name(db, consent_request.requesting_practitioner_id)
     return ConsentRequestResponse(
-        request=request_view(consent_request, source, recipient),
+        request=request_view(consent_request, source, recipient, name),
         correlation_id=UUID(request.state.correlation_id),
     )
 
@@ -153,9 +155,10 @@ async def approve_request(
     consent_request, grant, source, recipient = await approve_consent(
         db, actor, id, payload, idempotency_key
     )
+    name = await practitioner_name(db, consent_request.requesting_practitioner_id)
     return ConsentApprovalResponse(
-        request=request_view(consent_request, source, recipient),
-        grant=grant_view(grant, source, recipient),
+        request=request_view(consent_request, source, recipient, name),
+        grant=grant_view(grant, source, recipient, name),
         correlation_id=UUID(request.state.correlation_id),
     )
 
@@ -172,8 +175,9 @@ async def deny_request(
     consent_request, source, recipient = await transition_request(
         db, actor, id, payload, idempotency_key, "DENIED"
     )
+    name = await practitioner_name(db, consent_request.requesting_practitioner_id)
     return ConsentRequestResponse(
-        request=request_view(consent_request, source, recipient),
+        request=request_view(consent_request, source, recipient, name),
         correlation_id=UUID(request.state.correlation_id),
     )
 
@@ -190,8 +194,9 @@ async def cancel_request(
     consent_request, source, recipient = await transition_request(
         db, actor, id, payload, idempotency_key, "CANCELLED"
     )
+    name = await practitioner_name(db, consent_request.requesting_practitioner_id)
     return ConsentRequestResponse(
-        request=request_view(consent_request, source, recipient),
+        request=request_view(consent_request, source, recipient, name),
         correlation_id=UUID(request.state.correlation_id),
     )
 
@@ -206,8 +211,9 @@ async def revoke_grant(
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> ConsentGrantResponse:
     grant, source, recipient = await revoke_consent(db, actor, id, payload, idempotency_key)
+    name = await practitioner_name(db, grant.practitioner_id)
     return ConsentGrantResponse(
-        grant=grant_view(grant, source, recipient),
+        grant=grant_view(grant, source, recipient, name),
         correlation_id=UUID(request.state.correlation_id),
     )
 

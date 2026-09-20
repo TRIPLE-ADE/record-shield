@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import Actor
+from app.core import clock
 from app.core.errors import ApiError
 from app.core.primitives import (
     decode_cursor,
@@ -31,14 +32,14 @@ from app.schemas.records import (
     RecordCorrection,
     RecordCreate,
 )
-
-RESTRICTED_DOMAINS = {"mental_health", "hiv", "genetic", "cultural_attributes"}
-SENSITIVE_DOMAINS = {"vitals", "diagnoses", "medications", "allergies", "investigations"}
-DOCTOR_ROLES = {"ATTENDING_DOCTOR", "VISITING_DOCTOR", "EMERGENCY_DOCTOR"}
-CLERK_ROLES = {"CLERK_HEALTH_ATTENDANT"}
-NURSE_ROLES = {"NURSE_MIDWIFE"}
-PHARMACY_ROLES = {"PHARMACIST"}
-PHYSIO_ROLES = {"PHYSIOTHERAPIST"}
+from app.services.context import current_ward
+from app.services.policy import (
+    CLERK_ROLES,
+    DOCTOR_ROLES,
+    SENSITIVE_DOMAINS,
+    evaluate_encounter_creation,
+    evaluate_local_domain,
+)
 
 
 class PayloadModel(BaseModel):
@@ -113,13 +114,11 @@ class BillingPayload(PayloadModel):
 
 
 def _z(value: datetime) -> str:
-    if value.tzinfo is None or value.utcoffset() is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return clock.z(value)
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    return clock.now()
 
 
 def _require_key(key: str | None) -> str:
@@ -133,33 +132,59 @@ def _require_key(key: str | None) -> str:
 
 
 def _organization(actor: Actor) -> UUID:
-    if actor.membership is None:
-        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
-    return actor.membership.organization.id
+    return actor.organization_id
 
 
-def _ensure_domain_access(actor: Actor, domain: str, purpose: str = "treatment") -> None:
-    if domain in RESTRICTED_DOMAINS:
-        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
-    role = actor.membership.role if actor.membership else None
-    if purpose == "administration" and role not in CLERK_ROLES:
-        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
-    allowed = (
-        domain in {"administration", "billing", "demographics"}
-        if role in CLERK_ROLES
-        else domain
-        in {"history", "vitals", "diagnoses", "medications", "allergies", "investigations"}
-        if role in DOCTOR_ROLES
-        else domain in {"vitals", "nursing_notes", "medication_administration"}
-        if role in NURSE_ROLES
-        else domain in {"medications", "allergies"}
-        if role in PHARMACY_ROLES
-        else domain == "physiotherapy_notes"
-        if role in PHYSIO_ROLES
-        else False
+async def _deny(
+    db: AsyncSession,
+    actor: Actor,
+    reason_code: str,
+    resource_type: str,
+    resource_id: UUID,
+    metadata: dict[str, Any],
+) -> None:
+    db.add(
+        AuditEvent(
+            id=uuid4(),
+            actor_id=actor.user.id,
+            organization_id=actor.organization.id if actor.organization else None,
+            action="ACCESS_DENIED",
+            resource_type=resource_type,
+            resource_id=resource_id,
+            metadata_json={"reason_code": reason_code, **metadata},
+            occurred_at=_now(),
+        )
     )
-    if not allowed:
+    await db.commit()
+    raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
+
+
+async def _authorize_domain(
+    db: AsyncSession,
+    actor: Actor,
+    action: str,
+    domain: str,
+    patient_id: UUID,
+    ward_id: UUID | None,
+    purpose: str = "treatment",
+) -> None:
+    if actor.context is None:
         raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
+    role = actor.context.policy.role
+    if purpose == "administration" and role not in CLERK_ROLES:
+        await _deny(
+            db, actor, "PURPOSE_DENIED", "patient", patient_id, {"domain": domain, "action": action}
+        )
+    decision = evaluate_local_domain(actor.context.policy, action, domain, patient_id, ward_id)
+    if not decision.allowed:
+        await _deny(
+            db,
+            actor,
+            decision.reason_code,
+            "patient",
+            patient_id,
+            {"domain": domain, "action": action},
+        )
 
 
 def _validate_payload(domain: str, subtype: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -244,11 +269,13 @@ async def create_encounter(
 ) -> Encounter:
     key = _require_key(idempotency_key)
     organization_id = _organization(actor)
-    role = actor.membership.role
-    if payload.type == "ROUTINE" and role not in DOCTOR_ROLES | CLERK_ROLES:
+    if actor.context is None:
         raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
-    if payload.type == "EMERGENCY" and role not in DOCTOR_ROLES | NURSE_ROLES:
-        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
+    decision = evaluate_encounter_creation(actor.context.policy, payload.type)
+    if not decision.allowed:
+        await _deny(
+            db, actor, decision.reason_code, "patient", payload.patient_id, {"type": payload.type}
+        )
     fingerprint = request_fingerprint(
         str(actor.user.id), "POST", "/encounters", payload.model_dump(mode="json")
     )
@@ -274,6 +301,11 @@ async def create_encounter(
         patient_id=patient.id,
         organization_id=organization_id,
         ward_id=ward.id,
+        attending_membership_id=(
+            actor.membership.id
+            if actor.membership and actor.membership.role in DOCTOR_ROLES
+            else None
+        ),
         encounter_type=payload.type,
         status="OPEN",
         started_at=_now(),
@@ -354,8 +386,18 @@ async def create_record(
     idempotency_key: str | None,
 ) -> tuple[ClinicalRecord, ClinicalRecordRevision, Patient, Organization]:
     key = _require_key(idempotency_key)
-    _ensure_domain_access(actor, domain)
     organization_id = _organization(actor)
+    encounter = await db.scalar(
+        select(Encounter).where(
+            Encounter.id == payload.encounter_id,
+            Encounter.patient_id == patient_id,
+            Encounter.organization_id == organization_id,
+            Encounter.status == "OPEN",
+        )
+    )
+    await _authorize_domain(
+        db, actor, "C", domain, patient_id, encounter.ward_id if encounter else None
+    )
     fingerprint = request_fingerprint(
         str(actor.user.id),
         "POST",
@@ -378,17 +420,7 @@ async def create_record(
     patient = await db.scalar(
         select(Patient).where(Patient.id == patient_id, Patient.organization_id == organization_id)
     )
-    if patient is None:
-        raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
-    encounter = await db.scalar(
-        select(Encounter).where(
-            Encounter.id == payload.encounter_id,
-            Encounter.patient_id == patient_id,
-            Encounter.organization_id == organization_id,
-            Encounter.status == "OPEN",
-        )
-    )
-    if encounter is None:
+    if patient is None or encounter is None:
         raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
     normalized_payload = _validate_payload(domain, payload.subtype, payload.payload)
     now = _now()
@@ -469,7 +501,10 @@ async def update_record(
     if parts is None or parts[0].organization_id != _organization(actor):
         raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
     record, current, patient, organization = parts
-    _ensure_domain_access(actor, record.domain)
+    encounter = await db.get(Encounter, record.encounter_id)
+    await _authorize_domain(
+        db, actor, "C", record.domain, record.patient_id, encounter.ward_id if encounter else None
+    )
     fingerprint = request_fingerprint(
         str(actor.user.id),
         "PATCH",
@@ -583,8 +618,9 @@ async def list_records(
     limit: int,
     cursor: str | None,
 ) -> tuple[list[ClinicalRecordView], str | None, Organization, datetime]:
-    _ensure_domain_access(actor, domain, purpose)
     organization_id = _organization(actor)
+    ward_id = await current_ward(db, patient_id, organization_id)
+    await _authorize_domain(db, actor, "R", domain, patient_id, ward_id, purpose)
     patient = await db.scalar(
         select(Patient).where(Patient.id == patient_id, Patient.organization_id == organization_id)
     )

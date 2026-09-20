@@ -38,7 +38,7 @@ class Membership(Base):
     role: Mapped[str] = mapped_column(String(50), nullable=False)
     active: Mapped[bool] = mapped_column(nullable=False, default=True)
     suspended: Mapped[bool] = mapped_column(nullable=False, default=False)
-    shift_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    senior_nurse: Mapped[bool] = mapped_column(nullable=False, default=False)
 
 
 class Patient(Base):
@@ -58,6 +58,47 @@ class Ward(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
     organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+
+class Shift(Base):
+    __tablename__ = "shifts"
+    __table_args__ = (Index("ix_shifts_membership", "membership_id", "starts_at"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    membership_id: Mapped[UUID] = mapped_column(ForeignKey("memberships.id"), nullable=False)
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    cancelled: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
+class CareAssignment(Base):
+    __tablename__ = "care_assignments"
+    __table_args__ = (Index("ix_care_assignments_membership", "membership_id", "patient_id"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    membership_id: Mapped[UUID] = mapped_column(ForeignKey("memberships.id"), nullable=False)
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    patient_id: Mapped[UUID] = mapped_column(ForeignKey("patients.id"), nullable=False)
+    ward_id: Mapped[UUID] = mapped_column(ForeignKey("wards.id"), nullable=False)
+    relationship: Mapped[str] = mapped_column(String(30), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    sensitive_access: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+
+class TaskAssignment(Base):
+    __tablename__ = "task_assignments"
+    __table_args__ = (Index("ix_task_assignments_membership", "membership_id", "task_type"),)
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)
+    membership_id: Mapped[UUID] = mapped_column(ForeignKey("memberships.id"), nullable=False)
+    organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
+    patient_id: Mapped[UUID | None] = mapped_column(ForeignKey("patients.id"), nullable=True)
+    task_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    resource_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Encounter(Base):

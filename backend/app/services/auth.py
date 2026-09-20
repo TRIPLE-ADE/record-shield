@@ -1,16 +1,21 @@
 import hashlib
 import secrets
-from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from threading import Lock
 from typing import Any
 from uuid import UUID
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import clock
 from app.core.errors import ApiError
 from app.core.primitives import request_fingerprint
+from app.models import Membership, Organization, User
+from app.services.context import active_shift
 
 PREAUTH_COOKIE = "rs_preauth"
 SESSION_COOKIE = "rs_session"
@@ -20,48 +25,11 @@ PREAUTH_TIMEOUT = timedelta(minutes=30)
 FAILURE_WINDOW = timedelta(minutes=5)
 MAX_FAILURES = 5
 
-_PASSWORD_HASH = (
+_DUMMY_PASSWORD_HASH = (
     "$argon2id$v=19$m=65536,t=3,p=4$0rEXoUekvqdRTSud8DJBbw$"
     "V2q4RNud30UNKSj/S/mCzfGG99zdIYd6ItloTzBZgTg"
 )
 _password_hasher = PasswordHasher()
-
-
-@dataclass(frozen=True)
-class Organization:
-    id: UUID
-    name: str
-    mode: str
-
-
-@dataclass(frozen=True)
-class Shift:
-    id: UUID
-    starts_at: datetime
-    ends_at: datetime
-
-
-@dataclass(frozen=True)
-class Membership:
-    id: UUID
-    organization: Organization
-    role: str
-    active: bool = True
-    suspended: bool = False
-    shift: Shift | None = None
-
-
-@dataclass(frozen=True)
-class User:
-    id: UUID
-    username: str
-    kind: str
-    password_hash: str
-    verified: bool = True
-    active: bool = True
-    patient_id: UUID | None = None
-    memberships: tuple[Membership, ...] = ()
-    is_trust_operator: bool = False
 
 
 @dataclass
@@ -90,7 +58,8 @@ class LoginReplay:
 
 @dataclass
 class AuthService:
-    users: dict[str, User] = field(default_factory=dict)
+    """Server-side session state. Identity, memberships and context are read from the database."""
+
     preauth: dict[str, PreAuth] = field(default_factory=dict)
     sessions: dict[str, Session] = field(default_factory=dict)
     login_replays: dict[str, LoginReplay] = field(default_factory=dict)
@@ -98,89 +67,17 @@ class AuthService:
     failures: dict[str, list[datetime]] = field(default_factory=dict)
     lock: Lock = field(default_factory=Lock)
 
-    def __post_init__(self) -> None:
-        if self.users:
-            return
-        unity = Organization(UUID("00000000-0000-4000-8000-000000000003"), "Unity Medical", "LITE")
-        mercy = Organization(
-            UUID("00000000-0000-4000-8000-000000000002"),
-            "Mercy General",
-            "MOCK_EMR",
-        )
-        shift = Shift(
-            UUID("00000000-0000-4000-8000-000000000017"),
-            datetime(2026, 9, 20, 8, tzinfo=UTC),
-            datetime(2026, 9, 20, 16, tzinfo=UTC),
-        )
-        unity_membership = Membership(
-            UUID("00000000-0000-4000-8000-000000000005"),
-            unity,
-            "EMERGENCY_DOCTOR",
-            shift=shift,
-        )
-        mercy_membership = Membership(
-            UUID("00000000-0000-4000-8000-000000000006"),
-            mercy,
-            "ATTENDING_DOCTOR",
-            shift=shift,
-        )
-        multi_unity_membership = Membership(
-            UUID("00000000-0000-4000-8000-000000000011"),
-            unity,
-            "EMERGENCY_DOCTOR",
-            shift=shift,
-        )
-        self.users.update(
-            {
-                "amina.unity": User(
-                    UUID("00000000-0000-4000-8000-000000000004"),
-                    "amina.unity",
-                    "STAFF",
-                    _PASSWORD_HASH,
-                    memberships=(unity_membership,),
-                ),
-                "multi.staff": User(
-                    UUID("00000000-0000-4000-8000-000000000007"),
-                    "multi.staff",
-                    "STAFF",
-                    _PASSWORD_HASH,
-                    memberships=(multi_unity_membership, mercy_membership),
-                ),
-                "musa.patient": User(
-                    UUID("00000000-0000-4000-8000-000000000008"),
-                    "musa.patient",
-                    "PATIENT",
-                    _PASSWORD_HASH,
-                    patient_id=UUID("00000000-0000-4000-8000-000000000101"),
-                ),
-                "trust.operator": User(
-                    UUID("00000000-0000-4000-8000-000000000009"),
-                    "trust.operator",
-                    "STAFF",
-                    _PASSWORD_HASH,
-                    memberships=(
-                        Membership(
-                            UUID("00000000-0000-4000-8000-000000000010"),
-                            unity,
-                            "TRUST_OPERATOR",
-                        ),
-                    ),
-                    is_trust_operator=True,
-                ),
-            }
-        )
-
     @staticmethod
     def _hash(value: str) -> str:
         return hashlib.sha256(value.encode()).hexdigest()
 
     @staticmethod
     def _now() -> datetime:
-        return datetime.now(UTC)
+        return clock.now()
 
     @staticmethod
     def _z(value: datetime) -> str:
-        return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+        return clock.z(value)
 
     def bootstrap_csrf(self, cookie: str | None) -> tuple[str, datetime, bool]:
         now = self._now()
@@ -210,22 +107,34 @@ class AuthService:
         self._fail(username)
         raise ApiError(401, "AUTH_FAILED", "Unable to sign in with the supplied credentials.")
 
-    def _valid_membership(self, user: User, membership_id: UUID | None) -> Membership | None:
-        active_memberships = [
-            item for item in user.memberships if item.active and not item.suspended
-        ]
-        if user.kind == "PATIENT" or user.is_trust_operator:
+    async def _active_memberships(self, db: AsyncSession, user: User) -> list[Membership]:
+        rows = await db.scalars(
+            select(Membership).where(
+                Membership.user_id == user.id,
+                Membership.active.is_(True),
+                Membership.suspended.is_(False),
+            )
+        )
+        return list(rows)
+
+    async def _valid_membership(
+        self, db: AsyncSession, user: User, membership_id: UUID | None
+    ) -> Membership | None:
+        if user.kind == "PATIENT":
             return None
-        if membership_id is None and len(active_memberships) == 1:
-            return active_memberships[0]
-        for membership in active_memberships:
+        memberships = await self._active_memberships(db, user)
+        if membership_id is None and len(memberships) == 1:
+            return memberships[0]
+        for membership in memberships:
             if membership.id == membership_id:
                 return membership
         return None
 
-    def _verify_credentials(self, username: str, password: str) -> User | None:
-        user = self.users.get(username)
-        password_hash = user.password_hash if user else _PASSWORD_HASH
+    async def _verify_credentials(
+        self, db: AsyncSession, username: str, password: str
+    ) -> User | None:
+        user = await db.scalar(select(User).where(User.username == username))
+        password_hash = user.password_hash if user else _DUMMY_PASSWORD_HASH
         try:
             valid = _password_hasher.verify(password_hash, password)
         except (InvalidHashError, VerificationError, VerifyMismatchError):
@@ -254,8 +163,9 @@ class AuthService:
             raise ApiError(401, "AUTH_REQUIRED", "Authentication is required.")
         return session
 
-    def login(
+    async def login(
         self,
+        db: AsyncSession,
         username: str,
         password: str,
         membership_id: UUID | None,
@@ -295,11 +205,11 @@ class AuthService:
             raise ApiError(403, "CSRF_INVALID", "The security token is invalid.")
 
         normalized_username = username.strip().lower()
-        user = self._verify_credentials(normalized_username, password)
+        user = await self._verify_credentials(db, normalized_username, password)
         if user is None:
             self._generic_auth_failure(normalized_username)
-        membership = self._valid_membership(user, membership_id)
-        if user.kind == "STAFF" and not user.is_trust_operator and membership is None:
+        membership = await self._valid_membership(db, user, membership_id)
+        if user.kind == "STAFF" and membership is None:
             self._generic_auth_failure(normalized_username)
 
         now = self._now()
@@ -340,32 +250,26 @@ class AuthService:
             session.last_activity_at = self._now()
         return session
 
-    def session_user(self, session: Session) -> User:
-        user = next((item for item in self.users.values() if item.id == session.user_id), None)
+    async def session_user(self, db: AsyncSession, session: Session) -> User:
+        user = await db.get(User, session.user_id)
         if user is None or not user.active or not user.verified:
             raise ApiError(401, "AUTH_REQUIRED", "Authentication is required.")
         return user
 
-    def session_membership(self, session: Session, user: User) -> Membership | None:
+    async def session_membership(
+        self, db: AsyncSession, session: Session, user: User
+    ) -> Membership | None:
         if session.membership_id is None:
             return None
-        membership = next(
-            (item for item in user.memberships if item.id == session.membership_id),
-            None,
-        )
-        if membership is None or not membership.active or membership.suspended:
+        membership = await db.get(Membership, session.membership_id)
+        if (
+            membership is None
+            or membership.user_id != user.id
+            or not membership.active
+            or membership.suspended
+        ):
             raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
         return membership
-
-    def suspend_membership(self, membership_id: UUID, suspended: bool) -> None:
-        for username, user in self.users.items():
-            if not any(item.id == membership_id for item in user.memberships):
-                continue
-            memberships = tuple(
-                replace(item, suspended=suspended) if item.id == membership_id else item
-                for item in user.memberships
-            )
-            self.users[username] = replace(user, memberships=memberships)
 
     def csrf_for_session(self, session: Session, header: str | None) -> None:
         if not header or not secrets.compare_digest(session.csrf_token, header):
@@ -407,9 +311,11 @@ class AuthService:
         self.sessions.pop(self._hash(token), None)
         return True
 
-    def context(self, session: Session, correlation_id: UUID) -> dict[str, Any]:
-        user = self.session_user(session)
-        membership = self.session_membership(session, user)
+    async def context(
+        self, db: AsyncSession, session: Session, correlation_id: UUID
+    ) -> dict[str, Any]:
+        user = await self.session_user(db, session)
+        membership = await self.session_membership(db, session, user)
         permissions: list[str]
         organization: dict[str, Any] | None = None
         shift: dict[str, Any] | None = None
@@ -417,27 +323,26 @@ class AuthService:
         membership_id: UUID | None = None
         if user.kind == "PATIENT":
             permissions = ["portal.read"]
-        elif user.is_trust_operator:
-            role = "TRUST_OPERATOR"
-            permissions = ["trust.metadata.read", "security.review"]
         elif membership:
             role = membership.role
             membership_id = membership.id
-            organization = {
-                "organization_id": membership.organization.id,
-                "name": membership.organization.name,
-                "mode": membership.organization.mode,
-            }
-            if membership.shift:
+            org = await db.get(Organization, membership.organization_id)
+            if org is None:
+                raise ApiError(
+                    503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable."
+                )
+            organization = {"organization_id": org.id, "name": org.name, "mode": org.mode}
+            current_shift = await active_shift(db, membership.id)
+            if current_shift:
                 shift = {
-                    "id": membership.shift.id,
-                    "starts_at": self._z(membership.shift.starts_at),
-                    "ends_at": self._z(membership.shift.ends_at),
+                    "id": current_shift.id,
+                    "starts_at": self._z(current_shift.starts_at),
+                    "ends_at": self._z(current_shift.ends_at),
                     "active": True,
                 }
             permissions = (
                 ["trust.metadata.read", "security.review"]
-                if role == "TRUST_OPERATOR"
+                if role in {"TRUST_OPERATOR", "SECURITY_ADMIN"}
                 else [
                     "local_records.read_with_context",
                     "consent.request",

@@ -5,11 +5,11 @@
 The repository contains:
 
 - A Next.js frontend with a typed Axios client, React Query, and a local mock API.
-- A FastAPI backend under `backend/`, using async SQLAlchemy and supporting MySQL or PostgreSQL.
+- A FastAPI backend under `backend/`, using async SQLAlchemy on MySQL 8.4.
 - The implementation contract in `../docs/RecordShield_API_Contract.md` and `../docs/RecordShield_OpenAPI.json`.
 - A frontend implementation plan in `../docs/ui-implementation-plan.md`.
 
-The backend currently exposes only `GET /api/v1/health`. The frontend’s `GET /workspace/dashboard` is a demo-only mock route; it is not one of the public backend contract routes. It may be implemented as a temporary compatibility endpoint later, but it must not replace the contract work.
+The frontend’s `GET /workspace/dashboard` is a demo-only mock route; it is not one of the public backend contract routes. It may be implemented as a temporary compatibility endpoint later, but it must not replace the contract work.
 
 ## 2. Local setup
 
@@ -79,26 +79,39 @@ Also add server-side sessions, pre-auth/session CSRF binding, password hashing, 
 
 Exit criteria: login, logout, expiry, CSRF failure, wrong membership, and suspended-user tests pass without trusting browser claims.
 
-Implemented against the deterministic synthetic catalog. Sessions and pre-auth state are server-side in process memory for this milestone; M3 must move users, memberships, session records, and audit persistence into the selected database before production use.
+- [x] Users, memberships, organizations and shifts are read from the database on login and on every request (`services/auth.py`, `api/v1/dependencies.py`). The in-memory synthetic catalog is gone; migrations are the only seed.
+- [x] Suspending a membership row takes effect on the next request without relogin.
+- [ ] Sessions, pre-auth CSRF tokens, login/logout replays and login-failure counters are still process memory. Restarting the API logs everyone out. Move to a `sessions` table before multi-worker deployment.
 
 Development accounts all use the synthetic password `synthetic-example-password`:
 
-- `amina.unity` — one Unity Medical emergency-doctor membership.
+- `amina.unity` — Unity emergency doctor; on shift, care assignment for Musa in the Emergency Department with `sensitive_access`.
+- `grace.unity` — Unity nurse; on shift, care assignment for Musa in the Emergency Department.
+- `kunle.mercy` — Mercy visiting doctor; on shift, care assignment for Musa on the Medical Ward.
+- `john.mercy` — Mercy clerk; on shift, organization-wide ADMIN task assignment.
 - `multi.staff` — two memberships; login must provide a valid `membership_id`.
 - `musa.patient` — patient portal context.
-- `trust.operator` — trust-operator context without a clinical membership.
+- `trust.operator` — trust-operator context.
 
 ### M3 — Local workspace and records
 
-Status: **complete for the local vertical slice**
+Status: **complete for the local vertical slice, with contextual authorization**
 
 - [x] Model organizations, users, memberships, patients, encounters, records, revisions, idempotency references, and audit metadata.
-- [x] Implement local encounter creation at `POST /api/v1/encounters`.
+- [x] Model shifts, care assignments (with `sensitive_access`) and task assignments (ADMIN/LAB/PHARMACY). Migration `0003_context_model`.
+- [x] Implement local encounter creation at `POST /api/v1/encounters`. On-shift doctors and clerks only; the attending membership is recorded for doctors.
 - [x] Implement local record list/create/correction routes with domain-specific payload validation.
-- [x] Enforce role, organization/membership, sensitivity, restricted-domain, and version rules.
+- [x] Policy engine (`services/policy.py`) as pure functions with a table-driven test over the PRD §7.2 role matrix. Read and create/update domain sets are separate per role; Lab Scientist and Pharmacist are task-scoped.
+- [x] Context service (`services/context.py`) reloads active shift (`starts_at <= now < ends_at`, not cancelled), care assignments and task assignments on every request. Care roles need a care assignment for the patient and a ward match against the patient's open encounter; task roles need a matching task assignment.
+- [x] Restricted domains (`mental_health`, `hiv`, `genetic`) are readable only by doctors with `sensitive_access` on the active care assignment; never writable. `cultural_attributes` is never served.
+- [x] Every policy denial writes an `ACCESS_DENIED` audit event carrying the internal reason code (`SHIFT_INACTIVE`, `WARD_MISMATCH`, `CARE_ASSIGNMENT_REQUIRED`, `ROLE_DOMAIN_DENIED`, `SENSITIVITY_DENIED`, `PURPOSE_DENIED`); the public response is a generic 403.
+- [x] Test-only clock (`core/clock.py`) so tests can sit exactly at a shift boundary.
+- [x] Enforce organization/membership and version rules.
 - [x] Add Alembic migration and deterministic Unity/Mercy synthetic seed data.
+- [ ] `allowed_roles` and `emergency_summary_eligible` tags on records; demographics projection per role.
+- [ ] `POST`/`GET /admin/context-assignments`. Until then assignments change only through the seed or direct table updates.
 
-Exit criteria: an authorized local clinician can create and read an allowed record; unauthorized and stale-version attempts are safely rejected.
+Exit criteria: an authorized local clinician can create and read an allowed record; unauthorized and stale-version attempts are safely rejected. Verified: AC03 (nurse reads vitals, writes a nursing note, cannot write a physician note), AC04 (read allowed one second before shift end, denied at shift end, `/me` shows no shift), AC05 (care assignment ended while role remains → denied), clerk with ADMIN task reads demographics but not diagnoses, foreign-organization patient → privacy-safe 404.
 
 Implemented routes:
 
@@ -114,12 +127,14 @@ The M3 service stores clinical payloads and revisions in the selected SQL databa
 
 - [x] Source discovery bound to an open local encounter and verified patient-source link.
 - [x] Consent request list/create and approve/deny/cancel transitions with version checks.
-- [x] Patient-owned grant issuance, domain narrowing, expiry, and revocation.
-- [x] Read-only remote record exchange with source provenance, practitioner binding, and final authorization recheck.
+- [x] Patient-owned grant issuance, domain narrowing, expiry, and revocation. Grant duration now starts at approval time (`expires_at = approved_at + duration`); it was previously capped at request creation + 24 h, so `P7D` never lasted seven days.
+- [x] Read-only remote record exchange with source provenance, practitioner binding, and final authorization recheck. The release-time recheck now covers the grant and the practitioner's active shift.
+- [ ] Request ceiling: requested domains must be within the role's read set and the source disclosure policy; restricted domains need `sensitive_access` on the receiving care assignment.
+- [ ] Restricted-tag filtering on remote records, 5-second source timeout, `SOURCE_SCHEMA_ERROR` on malformed adapter output.
 - [x] Source adapter interface with a deterministic Mercy fixture; no public vendor or remote-write endpoint.
 - [x] Integration tests cover discovery, approval, denial, cancellation, scoped reads, revocation, and post-revocation denial.
 
-Exit criteria: consent scope, version conflicts, privacy-safe 404, revocation enforcement, and no-remote-write behavior pass in the isolated integration suite. Production vendor connectivity and auth/session persistence remain explicitly out of scope for this synthetic milestone.
+Exit criteria: consent scope, version conflicts, privacy-safe 404, revocation enforcement, and no-remote-write behavior pass in the isolated integration suite. Verified: a `P7D` grant approved two hours after the request expires exactly seven days after approval. Production vendor connectivity remains out of scope for this synthetic milestone.
 
 ### M5 — Emergency access
 

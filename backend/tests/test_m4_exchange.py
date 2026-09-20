@@ -1,111 +1,13 @@
-from uuid import UUID
-
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
-from app.core.db import Base, get_db
 from app.main import app
-from app.models import Membership, Organization, Patient, SourceLink, User, Ward
-
-PASSWORD_HASH = (
-    "$argon2id$v=19$m=65536,t=3,p=4$0rEXoUekvqdRTSud8DJBbw$"
-    "V2q4RNud30UNKSj/S/mCzfGG99zdIYd6ItloTzBZgTg"
-)
-UNITY_ID = UUID("00000000-0000-4000-8000-000000000003")
-MERCY_ID = UUID("00000000-0000-4000-8000-000000000002")
-AMINA_ID = UUID("00000000-0000-4000-8000-000000000004")
-AMINA_MEMBERSHIP_ID = UUID("00000000-0000-4000-8000-000000000005")
-MUSA_ID = UUID("00000000-0000-4000-8000-000000000008")
-PATIENT_ID = UUID("00000000-0000-4000-8000-000000000101")
-WARD_ID = UUID("00000000-0000-4000-8000-000000000007")
-SOURCE_LINK_ID = UUID("00000000-0000-4000-8000-000000000301")
-
-
-@pytest.fixture
-async def m4_database():
-    engine = create_async_engine(
-        "sqlite+aiosqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    session_factory = async_sessionmaker(engine, expire_on_commit=False)
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
-    async with session_factory() as session:
-        session.add_all(
-            [
-                Organization(id=UNITY_ID, name="Unity Medical", mode="LITE"),
-                Organization(id=MERCY_ID, name="Mercy General", mode="MOCK_EMR"),
-                User(
-                    id=AMINA_ID,
-                    username="amina.unity",
-                    kind="STAFF",
-                    password_hash=PASSWORD_HASH,
-                    verified=True,
-                    active=True,
-                ),
-                User(
-                    id=MUSA_ID,
-                    username="musa.patient",
-                    kind="PATIENT",
-                    password_hash=PASSWORD_HASH,
-                    verified=True,
-                    active=True,
-                    patient_id=PATIENT_ID,
-                ),
-                Membership(
-                    id=AMINA_MEMBERSHIP_ID,
-                    user_id=AMINA_ID,
-                    organization_id=UNITY_ID,
-                    role="EMERGENCY_DOCTOR",
-                    active=True,
-                    suspended=False,
-                ),
-                Patient(
-                    id=PATIENT_ID,
-                    organization_id=UNITY_ID,
-                    local_patient_id="HSP-99210",
-                    display_name="Musa Ibrahim",
-                    date_of_birth="1990-04-12",
-                ),
-                Ward(id=WARD_ID, organization_id=UNITY_ID, name="Emergency Department"),
-                SourceLink(
-                    id=SOURCE_LINK_ID,
-                    patient_id=PATIENT_ID,
-                    source_org_id=MERCY_ID,
-                    source_local_patient_id="PAT-00291",
-                    verified=True,
-                    availability="AVAILABLE",
-                ),
-            ]
-        )
-        await session.commit()
-
-    async def override_get_db():
-        async with session_factory() as session:
-            yield session
-
-    app.dependency_overrides[get_db] = override_get_db
-    yield
-    app.dependency_overrides.pop(get_db, None)
-    await engine.dispose()
-
-
-async def login(client: AsyncClient, username: str, key: str) -> str:
-    csrf = (await client.get("/api/v1/auth/csrf")).json()["csrf_token"]
-    response = await client.post(
-        "/api/v1/auth/login",
-        json={"username": username, "password": "synthetic-example-password"},
-        headers={"X-CSRF-Token": csrf, "Idempotency-Key": key},
-    )
-    assert response.status_code == 200, response.text
-    return response.json()["csrf_token"]
+from tests.conftest import MERCY_ID, PATIENT_ID, UNITY_ID, login
+from tests.conftest import UNITY_ED_ID as WARD_ID
 
 
 @pytest.mark.asyncio
-async def test_m4_source_consent_remote_read_and_revocation(m4_database) -> None:
+async def test_m4_source_consent_remote_read_and_revocation(database) -> None:
     transport = ASGITransport(app=app)
     async with (
         AsyncClient(transport=transport, base_url="http://test") as practitioner,
@@ -223,7 +125,7 @@ async def test_m4_source_consent_remote_read_and_revocation(m4_database) -> None
 
 
 @pytest.mark.asyncio
-async def test_m4_patient_can_deny_and_practitioner_can_cancel(m4_database) -> None:
+async def test_m4_patient_can_deny_and_practitioner_can_cancel(database) -> None:
     transport = ASGITransport(app=app)
     async with (
         AsyncClient(transport=transport, base_url="http://test") as practitioner,
