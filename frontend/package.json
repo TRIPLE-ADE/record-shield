@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "oxlint .",
     "lint:fix": "oxlint --fix .",
@@ -21,11 +21,11 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
+    "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "^5.103.1",
     "axios": "^1.20.0",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.3.0",
-    "lucide-react": "^1.47.0",
     "next": "16.3.5",
     "next-themes": "^0.4.6",
     "radix-ui": "^1.6.7",
