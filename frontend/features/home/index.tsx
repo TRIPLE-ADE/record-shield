@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRightIcon, ShieldIcon, SparkleIcon } from "@phosphor-icons/react";
+import { ArrowUpRightIcon, LockKeyIcon, ShieldIcon, SparkleIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
@@ -42,12 +42,21 @@ export default function HomePage() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild size="lg">
-                <Link href="/design-system">
-                  Open design system
+                <Link href="/login">
+                  Enter workspace
                   <ArrowUpRightIcon aria-hidden="true" />
                 </Link>
               </Button>
-              <span className="text-xs text-muted-foreground">No live patient data</span>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/design-system">
+                  View design system
+                  <ArrowUpRightIcon aria-hidden="true" />
+                </Link>
+              </Button>
+              <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <LockKeyIcon aria-hidden="true" className="size-3.5 text-primary" />
+                No live patient data
+              </span>
             </div>
           </div>
         </section>

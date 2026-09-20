@@ -24,6 +24,7 @@ export function ScopeSelector({ options }: ScopeSelectorProps) {
   const { control } = useFormContext<ScopeFormValues>();
   const { field } = useController({ name: "domains", control });
   const selected = Array.isArray(field.value) ? field.value : [];
+  const selectedIds = new Set(selected);
 
   function toggleScope(id: string) {
     field.onChange(
@@ -39,7 +40,7 @@ export function ScopeSelector({ options }: ScopeSelectorProps) {
       </p>
       <div className="grid gap-2">
         {options.map((option) => {
-          const isSelected = selected.includes(option.id);
+          const isSelected = selectedIds.has(option.id);
           const isRestricted = option.sensitivity === "restricted";
 
           return (

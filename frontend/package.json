@@ -10,14 +10,15 @@
     "lint:fix": "oxlint --fix .",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsgo --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:browser": "vitest run --browser.headless",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test"
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
+    "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -43,6 +44,7 @@
     "@types/node": "^22.20.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/browser-playwright": "^5.0.1",
     "@vitest/coverage-v8": "^5.0.1",

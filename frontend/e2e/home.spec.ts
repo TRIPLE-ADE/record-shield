@@ -6,8 +6,40 @@ test("home keeps the product foundation intentionally simple", async ({ page }) 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "A calmer way to build clinical trust.",
   );
-  await expect(page.getByRole("link", { name: /Open design system/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Enter workspace/i })).toBeVisible();
   await expect(page.getByText("No live patient data")).toBeVisible();
+});
+
+test("requires an authenticated context before showing the workspace", async ({ page }) => {
+  await page.goto("/workspace");
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Start with the person, then the permission.",
+  );
+});
+
+test("signs in with a seeded identity and renders server context", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Amina Yusuf" }).click();
+  await page.getByRole("button", { name: "Enter workspace" }).click();
+
+  await expect(page).toHaveURL(/\/workspace$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Good to see you/);
+  await expect(page.getByText("Unity Medical")).toBeVisible();
+  await expect(page.getByText("Emergency Doctor")).toBeVisible();
+  await expect(
+    page.getByText("No clinical payload has been requested on this page."),
+  ).toBeVisible();
+});
+
+test("logout clears the protected workspace", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "John Mensah" }).click();
+  await page.getByRole("button", { name: "Enter workspace" }).click();
+  await expect(page).toHaveURL(/\/workspace$/);
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/login$/);
 });
 
 test("design system is available as a separate preview route", async ({ page }) => {
