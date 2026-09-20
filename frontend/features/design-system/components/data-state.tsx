@@ -1,10 +1,10 @@
 import {
-  CheckCircle,
-  CircleDashed,
-  Clock,
-  FileMagnifyingGlass,
-  LockKey,
-  CloudSlash,
+  CheckCircleIcon,
+  CircleDashedIcon,
+  ClockIcon,
+  FileMagnifyingGlassIcon,
+  LockKeyIcon,
+  CloudSlashIcon,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { StatusBadge, type StatusTone } from "./status-badge";
@@ -13,13 +13,13 @@ type DataStateKind = "ready" | "empty" | "denied" | "unavailable" | "expired";
 
 const stateConfig: Record<
   DataStateKind,
-  { label: string; tone: StatusTone; icon: typeof CheckCircle }
+  { label: string; tone: StatusTone; icon: typeof CheckCircleIcon }
 > = {
-  ready: { label: "Ready", tone: "success", icon: CheckCircle },
-  empty: { label: "No records", tone: "neutral", icon: FileMagnifyingGlass },
-  denied: { label: "Access denied", tone: "critical", icon: LockKey },
-  unavailable: { label: "Source unavailable", tone: "warning", icon: CloudSlash },
-  expired: { label: "Scope expired", tone: "emergency", icon: Clock },
+  ready: { label: "Ready", tone: "success", icon: CheckCircleIcon },
+  empty: { label: "No records", tone: "neutral", icon: FileMagnifyingGlassIcon },
+  denied: { label: "Access denied", tone: "critical", icon: LockKeyIcon },
+  unavailable: { label: "Source unavailable", tone: "warning", icon: CloudSlashIcon },
+  expired: { label: "Scope expired", tone: "emergency", icon: ClockIcon },
 };
 
 type DataStateProps = {
@@ -43,7 +43,7 @@ export function DataState({ kind, title, description, action, className }: DataS
           <Icon aria-hidden="true" className="size-4" />
         </div>
         <div className="min-w-0 space-y-1">
-          <StatusBadge tone={tone} icon={CircleDashed}>
+          <StatusBadge tone={tone} icon={CircleDashedIcon}>
             {label}
           </StatusBadge>
           <p className="font-medium text-foreground">{title}</p>

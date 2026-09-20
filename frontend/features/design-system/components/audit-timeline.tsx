@@ -1,4 +1,9 @@
-import { CheckCircle, WarningCircle, Eye, ShieldCheck } from "@phosphor-icons/react";
+import {
+  CheckCircleIcon,
+  WarningCircleIcon,
+  EyeIcon,
+  ShieldCheckIcon,
+} from "@phosphor-icons/react";
 import { StatusBadge } from "./status-badge";
 
 type AuditEvent = {
@@ -10,9 +15,9 @@ type AuditEvent = {
 };
 
 const eventPresentation = {
-  emergency: { tone: "emergency" as const, icon: Eye },
-  success: { tone: "success" as const, icon: CheckCircle },
-  critical: { tone: "critical" as const, icon: WarningCircle },
+  emergency: { tone: "emergency" as const, icon: EyeIcon },
+  success: { tone: "success" as const, icon: CheckCircleIcon },
+  critical: { tone: "critical" as const, icon: WarningCircleIcon },
 };
 
 export function AuditTimeline({ events }: { events: AuditEvent[] }) {
@@ -42,7 +47,7 @@ export function AuditTimeline({ events }: { events: AuditEvent[] }) {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="truncate text-xs text-muted-foreground">{event.detail}</p>
-                <StatusBadge tone={presentation.tone} icon={ShieldCheck}>
+                <StatusBadge tone={presentation.tone} icon={ShieldCheckIcon}>
                   Logged
                 </StatusBadge>
               </div>

@@ -1,6 +1,6 @@
 # RecordShield Frontend UI Implementation Plan
 
-Status: ready for implementation
+Status: Gate 4 implemented; Gate 5 pending
 
 This plan turns the RecordShield product and architecture specification into a frontend build sequence. It is deliberately written for the current Next.js app, which will use a contract-faithful mock API until the real services are available.
 
@@ -14,7 +14,7 @@ There are three different kinds of input:
 
 The frontend must preserve the specification's hard boundaries:
 
-- All data is synthetic and visibly labeled as demonstration data.
+- Demo fixtures remain synthetic at the transport boundary; product surfaces use task-relevant copy instead of repeating implementation disclaimers.
 - The client never treats a role, hospital, ward, shift, patient link, grant, or emergency flag supplied by the browser as authoritative.
 - The UI renders the server decision; it does not turn a hidden button into an authorization control.
 - The mock API uses the same `/api/v1` paths, status codes, response shapes, headers, expiry rules, and safe error behavior as the future service.
@@ -42,13 +42,15 @@ The demo is successful when these decisions and evidence are visible. A page tha
 The App Router remains a thin route composition layer. Feature modules own page behavior, API calls, view models, and colocated browser tests.
 
 ```text
+next.config.ts                            # root redirect to /login
 app/
-  page.tsx                              # re-export only
+  design-system/page.tsx                # re-export features/design-system
   (auth)/login/page.tsx                 # re-export features/auth
   (workspace)/workspace/page.tsx        # re-export features/workspace
-  (workspace)/patients/[id]/page.tsx    # re-export features/patient-records
-  (workspace)/patients/[id]/exchange/page.tsx
-  (portal)/portal/page.tsx              # re-export features/portal
+  (workspace)/workspace/patients/[id]/page.tsx
+  (workspace)/workspace/patients/[id]/exchange/page.tsx
+  (workspace)/workspace/patients/[id]/emergency/page.tsx
+  (portal)/portal/page.tsx               # re-export features/portal
   (security)/security/page.tsx          # re-export features/security
   (admin)/admin/page.tsx                # re-export features/admin
   api/v1/[...path]/route.ts             # mock transport only, demo mode
@@ -74,8 +76,11 @@ lib/
   api/
   mock-api/
   query/
-  formatters/
   security/
+
+utils/                                  # shared domain helpers and formatters
+
+hooks/                                  # global React Query hooks grouped by domain
 
 e2e/                                    # Playwright only
 ```
@@ -84,15 +89,21 @@ Each feature follows the same shape:
 
 ```text
 features/<feature>/
-  page.tsx                               # optional route-level composition
+  index.tsx                              # route-level composition
   components/
-  api.ts                                 # query and mutation functions
+  api/
+    index.ts                             # transport functions and response parsing
+    index.test.ts                        # API contract tests
   schemas.ts                             # Zod request/response schemas
   view-models.ts                         # server data to display model
-  *.test.tsx                             # colocated Vitest Browser Mode tests
+  index.test.tsx                         # colocated Vitest Browser Mode tests
 ```
 
 `components/ui` stays limited to generated or lightly customized shadcn primitives. Product-specific pieces belong in the owning feature so their behavior and tests stay together.
+
+The design-system route is one self-contained reference page. It does not depend on an app shell, a route layout, or an API response. Protected workspace chrome is owned by the workspace route group.
+
+The root path redirects to `/login`; there is no product home feature. The visual preview at `/design-system` is static by design, development-only, and does not require an API contract or mock response.
 
 ## 4. Gate 0: design system before product features
 
@@ -114,7 +125,6 @@ Do not encode product meaning through color alone. Every state also gets readabl
 
 Use the installed shadcn primitives to create and test these shared compositions:
 
-- `AppShell` - responsive navigation, hospital identity, signed-in user, synthetic-data banner, and session actions;
 - `WorkspaceHeader` - hospital mode, role, ward, shift countdown/status, and context refresh state;
 - `PageHeader` - title, purpose, breadcrumbs, and primary action slot;
 - `StatusBadge` - authorization, grant, emergency, alert, and integrity states;
@@ -156,8 +166,8 @@ The real API base URL remains configurable through the Axios client. Switching f
 
 ```text
 feature component
-  -> React Query hook
-    -> feature api function
+  -> feature hook (React Query)
+    -> feature API function
       -> lib/api/client.ts
         -> /api/v1 (mock route now, real service later)
 ```
@@ -224,6 +234,8 @@ Remote clinical queries are memory-only, `no-store`, revalidated on window focus
 
 Mutations invalidate only the affected metadata queries and refetch the protected clinical query after the server confirms the new authorization state. A mutation retry reuses its idempotency key and never invents a second grant, encounter, session, or record.
 
+The current implementation follows the state-management skill boundary: React Query owns server state and cache lifetime, React Hook Form owns request and approval forms, and local `useState` owns tabs, selected domains, and dialog visibility. No Zustand or cross-route client store is needed because the current workflows derive their context from the session and query cache.
+
 ### 5.5 Deterministic mock state
 
 The mock store seeds the exact two-hospital fixture from the specification:
@@ -241,6 +253,8 @@ The store also exposes test-only clock advancement, source disconnect, audit out
 ## 6. Feature implementation sequence
 
 ### Gate 1 - Authentication and context
+
+Status: implemented in the current frontend; the routes and mock transport below are live and covered by colocated browser tests plus Playwright flows.
 
 Build:
 
@@ -263,6 +277,8 @@ Quality gate:
 - A suspended membership changes the next request to a safe denial without requiring a new login.
 
 ### Gate 2 - Local workspace and records
+
+Status: implemented. The patient route, local record transport, role-aware projections, Unity writes, immutable corrections, and colocated contract/browser coverage are live.
 
 Build:
 
@@ -287,6 +303,8 @@ Quality gate:
 - A stale `If-Match` correction shows a conflict and creates no duplicate version.
 
 ### Gate 3 - Exchange discovery, consent, and portal
+
+Status: implemented. Source discovery, consent requests, patient approval, grant revocation, and read-only remote retrieval are live through the mock HTTP boundary. The clinician exchange page is `/workspace/patients/[id]/exchange`; the patient portal is `/portal`.
 
 Build:
 
@@ -318,6 +336,11 @@ Quality gate:
 - Unity cannot write to Mercy or reach the private Mercy adapter directly.
 
 ### Gate 4 - Emergency progressive disclosure
+
+Status: implemented. Emergency activation, bounded summary reads, explicit Level 2 expansion,
+justification, expiry, patient notification metadata, and security-admin revocation are live through
+the contract-faithful mock transport. The clinician flow is
+`/workspace/patients/[id]/emergency`.
 
 Build:
 
@@ -455,7 +478,7 @@ Do not duplicate every assertion in every layer. Keep security invariants at the
 
 ### 8.3 Browser-mode test conventions
 
-- Tests live beside the feature: `features/<feature>/*.test.tsx`.
+- UI tests live beside the feature in `features/<feature>/index.test.tsx`; API contract tests live beside their implementation in `features/<feature>/api/index.test.ts`.
 - Use `render` from `vitest-browser-react`, locators from `vitest/browser`, and `expect.element` assertions.
 - Prefer role, label, and text locators that reflect the accessible UI.
 - Install a fresh mock store per test or reset through a test-only store fixture; do not depend on test order.

@@ -1,30 +1,30 @@
-import { LockKey, ShieldCheck, ShieldWarning } from "@phosphor-icons/react";
+import { LockKeyIcon, ShieldCheckIcon, ShieldWarningIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 
 type Sensitivity = "standard" | "sensitive" | "restricted";
 
 const sensitivityConfig: Record<
   Sensitivity,
-  { label: string; description: string; icon: typeof ShieldCheck; className: string }
+  { label: string; description: string; icon: typeof ShieldCheckIcon; className: string }
 > = {
   standard: {
     label: "Standard",
     description: "Available within ordinary policy scope",
-    icon: ShieldCheck,
+    icon: ShieldCheckIcon,
     className:
       "border-sensitivity-standard/25 bg-sensitivity-standard/10 text-sensitivity-standard",
   },
   sensitive: {
     label: "Sensitive",
     description: "Requires role and assignment checks",
-    icon: ShieldWarning,
+    icon: ShieldWarningIcon,
     className:
       "border-sensitivity-sensitive/25 bg-sensitivity-sensitive/10 text-sensitivity-sensitive",
   },
   restricted: {
     label: "Restricted",
     description: "Requires explicit domain permission",
-    icon: LockKey,
+    icon: LockKeyIcon,
     className:
       "border-sensitivity-restricted/25 bg-sensitivity-restricted/10 text-sensitivity-restricted",
   },

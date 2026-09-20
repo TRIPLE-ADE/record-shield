@@ -1,6 +1,6 @@
 # RecordShield frontend
 
-RecordShield is a Next.js workspace for reviewable clinical data exchange. The product surface is under `features/home`; the internal component preview is available at `/design-system`.
+RecordShield is a Next.js foundation for a reviewable clinical data exchange product. The root route sends users to sign in; the component reference is available at `/design-system` during development only.
 
 ## Run locally
 
@@ -11,14 +11,19 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-The browser uses the Axios mock adapter when `NEXT_PUBLIC_API_URL` is empty. Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_API_URL` when the service is available; the feature query and response validation remain unchanged.
+The login and workspace slice uses the documented `/api/v1` contract end to end. Leave `NEXT_PUBLIC_API_URL` empty while developing locally; set it in `.env.local` when the service is available so feature queries can use the same client without a UI rewrite.
 
 ## Project conventions
 
-- `app/page.tsx` and `app/design-system/page.tsx` are thin route exports.
-- Product code, colocated browser tests, and API query definitions live in `features/`.
+- `next.config.ts` redirects the root path to sign in. Other route files stay thin and compose feature pages from the design-system, auth, workspace, patient-records, exchange, emergency, and portal modules.
+- Each feature `index.tsx` is page composition only. Component functions live one-per-file under that feature's `components/` directory; feature data, schemas, types, and pure helpers live in their own modules.
+- Each feature API lives in `features/<feature>/api/index.ts`, with its API contract tests colocated in `features/<feature>/api/index.test.ts`.
+- React Query queries and mutations live in the global `hooks/` folder, grouped by domain (`auth.ts`, `patient-records.ts`, `exchange.ts`, and `emergency.ts`). They call feature API functions and own cache policy.
+- Feature pages and their colocated browser tests live in `features/*/index.tsx` and `features/*/index.test.tsx`.
 - `e2e/` contains Playwright flows that exercise the running application.
-- Shared visual primitives live in `components/`; API clients, contracts, and mock transport live in `lib/`.
+- The design-system route is a self-contained development-only reference page; protected workspace chrome lives under the workspace route group.
+- Shared visual primitives live in `components/`; API clients, contract schemas, and mock transport live in `lib/`; shared domain helpers live in `utils/`.
+- `docs/RecordShield_API_Contract.md` and `docs/RecordShield_OpenAPI.json` remain the source of truth for every future API-backed feature.
 
 ## Verification
 
@@ -27,5 +32,6 @@ pnpm lint
 pnpm format:check
 pnpm typecheck
 pnpm test
+pnpm doctor
 CI=1 pnpm test:e2e
 ```
