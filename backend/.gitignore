@@ -7,3 +7,4 @@ __pycache__/
 .mypy_cache/
 RecordShield_PRD_and_Architecture.pdf
 PLAN.md
+audit.sqlite

@@ -19,6 +19,7 @@ from app.core.db import Base, get_db
 from app.main import app
 from app.models import (
     CareAssignment,
+    HospitalPolicy,
     Membership,
     Organization,
     Patient,
@@ -27,7 +28,26 @@ from app.models import (
     TaskAssignment,
     User,
     Ward,
+    WardAssignment,
 )
+from app.services import audit
+from app.services.exchange import reset_rate_limits
+from app.services.policy import (
+    DEFAULT_EMERGENCY_LEVEL2_DOMAINS,
+    DEFAULT_EMERGENCY_LEVEL2_RESTRICTED,
+    DEFAULT_EMERGENCY_ROLES,
+    DEFAULT_NORMAL_DISCLOSURE_DOMAINS,
+)
+from app.services.source_adapter import MercyAdapter, source_adapters
+from audit_service.config import settings as audit_settings
+from audit_service.db import get_session as audit_get_session
+from audit_service.main import app as audit_app
+from audit_service.models import AuditBase
+from mock_emr.config import settings as mock_settings
+from mock_emr.db import get_session as vendor_get_session
+from mock_emr.main import app as mock_app
+from mock_emr.models import VendorBase
+from mock_emr.seed import seed as vendor_seed
 
 PASSWORD = "synthetic-example-password"
 PASSWORD_HASH = (
@@ -53,6 +73,10 @@ GRACE_MEMBERSHIP_ID = UUID("00000000-0000-4000-8000-000000000015")
 KUNLE_MEMBERSHIP_ID = UUID("00000000-0000-4000-8000-000000000016")
 JOHN_MEMBERSHIP_ID = UUID("00000000-0000-4000-8000-000000000018")
 MERCY_WARD_ID = UUID("00000000-0000-4000-8000-000000000020")
+SARAH_UNITY_ID = UUID("00000000-0000-4000-8000-000000000021")
+SARAH_UNITY_MEMBERSHIP_ID = UUID("00000000-0000-4000-8000-000000000022")
+SARAH_MERCY_ID = UUID("00000000-0000-4000-8000-000000000023")
+SARAH_MERCY_MEMBERSHIP_ID = UUID("00000000-0000-4000-8000-000000000024")
 PATIENT_ID = UUID("00000000-0000-4000-8000-000000000101")
 DECOY_PATIENT_ID = UUID("00000000-0000-4000-8000-000000000102")
 MERCY_PATIENT_ID = UUID("00000000-0000-4000-8000-000000000103")
@@ -61,6 +85,10 @@ AMINA_SHIFT_ID = UUID("00000000-0000-4000-8000-000000000401")
 KUNLE_SHIFT_ID = UUID("00000000-0000-4000-8000-000000000405")
 AMINA_CARE_ID = UUID("00000000-0000-4000-8000-000000000501")
 GRACE_CARE_ID = UUID("00000000-0000-4000-8000-000000000502")
+AMINA_WARD_ASSIGNMENT_ID = UUID("00000000-0000-4000-8000-000000000901")
+MULTI_UNITY_WARD_ASSIGNMENT_ID = UUID("00000000-0000-4000-8000-000000000902")
+GRACE_WARD_ASSIGNMENT_ID = UUID("00000000-0000-4000-8000-000000000903")
+KUNLE_WARD_ASSIGNMENT_ID = UUID("00000000-0000-4000-8000-000000000904")
 
 def _user(id: UUID, username: str, kind: str = "STAFF", patient_id: UUID | None = None) -> User:
     return User(
@@ -121,9 +149,41 @@ def seed_rows(now: datetime) -> list[object]:
             sensitive_access=sensitive,
         )
 
+    def ward_assignment(
+        id: UUID, membership_id: UUID, org_id: UUID, ward_id: UUID
+    ) -> WardAssignment:
+        return WardAssignment(
+            id=id,
+            membership_id=membership_id,
+            organization_id=org_id,
+            ward_id=ward_id,
+            starts_at=starts,
+            ends_at=ends,
+        )
+
+    def policy(id: str, org_id: UUID, emergency_restricted: bool) -> HospitalPolicy:
+        level2 = list(DEFAULT_EMERGENCY_LEVEL2_DOMAINS)
+        if emergency_restricted:
+            level2 += DEFAULT_EMERGENCY_LEVEL2_RESTRICTED
+        return HospitalPolicy(
+            id=UUID(id),
+            organization_id=org_id,
+            version=1,
+            break_glass_enabled=True,
+            eligible_roles=list(DEFAULT_EMERGENCY_ROLES),
+            eligible_membership_ids=[],
+            normal_disclosure_domains=list(DEFAULT_NORMAL_DISCLOSURE_DOMAINS),
+            emergency_disclosure_roles=list(DEFAULT_EMERGENCY_ROLES),
+            emergency_restricted_enabled=emergency_restricted,
+            emergency_level2_domains=level2,
+            updated_at=now,
+        )
+
     return [
         Organization(id=MERCY_ID, name="Mercy General", mode="MOCK_EMR"),
         Organization(id=UNITY_ID, name="Unity Medical", mode="LITE"),
+        policy("00000000-0000-4000-8000-000000000701", MERCY_ID, True),
+        policy("00000000-0000-4000-8000-000000000702", UNITY_ID, False),
         _user(AMINA_ID, "amina.unity"),
         _user(MULTI_ID, "multi.staff"),
         _user(MUSA_USER_ID, "musa.patient", "PATIENT", PATIENT_ID),
@@ -131,6 +191,8 @@ def seed_rows(now: datetime) -> list[object]:
         _user(GRACE_ID, "grace.unity"),
         _user(KUNLE_ID, "kunle.mercy"),
         _user(JOHN_ID, "john.mercy"),
+        _user(SARAH_UNITY_ID, "sarah.unity"),
+        _user(SARAH_MERCY_ID, "sarah.mercy"),
         _membership(AMINA_MEMBERSHIP_ID, AMINA_ID, UNITY_ID, "EMERGENCY_DOCTOR"),
         _membership(MULTI_MERCY_MEMBERSHIP_ID, MULTI_ID, MERCY_ID, "ATTENDING_DOCTOR"),
         _membership(MULTI_UNITY_MEMBERSHIP_ID, MULTI_ID, UNITY_ID, "EMERGENCY_DOCTOR"),
@@ -138,6 +200,8 @@ def seed_rows(now: datetime) -> list[object]:
         _membership(GRACE_MEMBERSHIP_ID, GRACE_ID, UNITY_ID, "NURSE_MIDWIFE"),
         _membership(KUNLE_MEMBERSHIP_ID, KUNLE_ID, MERCY_ID, "VISITING_DOCTOR"),
         _membership(JOHN_MEMBERSHIP_ID, JOHN_ID, MERCY_ID, "CLERK_HEALTH_ATTENDANT"),
+        _membership(SARAH_UNITY_MEMBERSHIP_ID, SARAH_UNITY_ID, UNITY_ID, "SECURITY_ADMIN"),
+        _membership(SARAH_MERCY_MEMBERSHIP_ID, SARAH_MERCY_ID, MERCY_ID, "SECURITY_ADMIN"),
         Patient(
             id=PATIENT_ID,
             organization_id=UNITY_ID,
@@ -167,6 +231,12 @@ def seed_rows(now: datetime) -> list[object]:
         shift("00000000-0000-4000-8000-000000000404", GRACE_MEMBERSHIP_ID, UNITY_ID),
         shift("00000000-0000-4000-8000-000000000405", KUNLE_MEMBERSHIP_ID, MERCY_ID),
         shift("00000000-0000-4000-8000-000000000406", JOHN_MEMBERSHIP_ID, MERCY_ID),
+        ward_assignment(AMINA_WARD_ASSIGNMENT_ID, AMINA_MEMBERSHIP_ID, UNITY_ID, UNITY_ED_ID),
+        ward_assignment(
+            MULTI_UNITY_WARD_ASSIGNMENT_ID, MULTI_UNITY_MEMBERSHIP_ID, UNITY_ID, UNITY_ED_ID
+        ),
+        ward_assignment(GRACE_WARD_ASSIGNMENT_ID, GRACE_MEMBERSHIP_ID, UNITY_ID, UNITY_ED_ID),
+        ward_assignment(KUNLE_WARD_ASSIGNMENT_ID, KUNLE_MEMBERSHIP_ID, MERCY_ID, MERCY_WARD_ID),
         care(
             AMINA_CARE_ID, AMINA_MEMBERSHIP_ID, UNITY_ID, PATIENT_ID, UNITY_ED_ID, "EMERGENCY", True
         ),
@@ -209,7 +279,65 @@ def seed_rows(now: datetime) -> list[object]:
 
 
 @pytest.fixture
-async def database():
+async def audit_process():
+    """The isolated audit process, mounted in-process. Yields its session factory so tests can
+    tamper with a chain the way an attacker with file access would."""
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(AuditBase.metadata.create_all)
+
+    async def override_session():
+        async with factory() as session:
+            yield session
+
+    audit_app.dependency_overrides[audit_get_session] = override_session
+    http = AsyncClient(transport=ASGITransport(app=audit_app), base_url="http://audit")
+    previous = audit.client
+    audit.client = audit.AuditClient(http, audit_settings.audit_service_key)
+    yield factory
+    audit.client = previous
+    audit_app.dependency_overrides.pop(audit_get_session, None)
+    await http.aclose()
+    await engine.dispose()
+
+
+@pytest.fixture
+async def mock_emr():
+    """Mercy's vendor system, mounted in-process. Yields its session factory for tampering."""
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with engine.begin() as connection:
+        await connection.run_sync(VendorBase.metadata.create_all)
+    async with factory() as session:
+        await vendor_seed(session)
+
+    async def override_session():
+        async with factory() as session:
+            yield session
+
+    mock_app.dependency_overrides[vendor_get_session] = override_session
+    vendor_client = AsyncClient(transport=ASGITransport(app=mock_app), base_url="http://mercy-emr")
+    previous = source_adapters.get(MERCY_ID)
+    source_adapters[MERCY_ID] = MercyAdapter(vendor_client, mock_settings.mercy_emr_service_key)
+    yield factory
+    if previous is not None:
+        source_adapters[MERCY_ID] = previous
+    mock_app.dependency_overrides.pop(vendor_get_session, None)
+    await vendor_client.aclose()
+    await engine.dispose()
+
+
+@pytest.fixture
+async def database(mock_emr, audit_process):
     engine = create_async_engine(
         "sqlite+aiosqlite://",
         connect_args={"check_same_thread": False},
@@ -230,6 +358,7 @@ async def database():
     yield session_factory
     app.dependency_overrides.pop(get_db, None)
     clock.set_override(None)
+    reset_rate_limits()
     await engine.dispose()
 
 

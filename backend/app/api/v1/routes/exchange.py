@@ -71,7 +71,7 @@ async def get_sources(
         raise ApiError(422, "VALIDATION_ERROR", "The purpose is invalid.")
     if cursor:
         raise ApiError(422, "VALIDATION_ERROR", "Source discovery does not support cursors.")
-    items = await discover_sources(db, actor, id, receiving_encounter_id)
+    items = await discover_sources(db, actor, id, receiving_encounter_id, purpose)
     now = datetime.now(UTC)
     return SourceCollection(
         items=[
@@ -234,7 +234,15 @@ async def get_remote_records(
     if any(domain not in VALID_DOMAINS for domain in requested_domains):
         raise ApiError(422, "VALIDATION_ERROR", "The requested exchange domain is invalid.")
     items, next_cursor, source, retrieved_at = await read_remote_records(
-        db, actor, id, source_id, grant_id, requested_domains, limit, cursor
+        db,
+        actor,
+        id,
+        source_id,
+        grant_id,
+        requested_domains,
+        limit,
+        cursor,
+        UUID(request.state.correlation_id),
     )
     return RecordCollection(
         items=items,

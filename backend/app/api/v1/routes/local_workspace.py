@@ -83,7 +83,7 @@ async def get_local_records(
     if purpose not in {"treatment", "administration"}:
         raise ApiError(422, "VALIDATION_ERROR", "The purpose is invalid.")
     items, next_cursor, organization, retrieved_at = await list_records(
-        db, actor, id, domain, purpose, limit, cursor
+        db, actor, id, domain, purpose, limit, cursor, UUID(request.state.correlation_id)
     )
     return RecordCollection(
         items=items,
@@ -118,10 +118,12 @@ async def create_local_record(
 ) -> RecordWriteResponse:
     if domain not in VALID_DOMAINS:
         raise ApiError(422, "VALIDATION_ERROR", "The domain is invalid.")
-    record, revision, _, _ = await create_record(db, actor, id, domain, payload, idempotency_key)
+    record, revision, _, _, sync_status = await create_record(
+        db, actor, id, domain, payload, idempotency_key
+    )
     return RecordWriteResponse(
         record=record_view(record, revision),
-        audit_sync_status="SYNCED",
+        audit_sync_status=sync_status,
         correlation_id=UUID(request.state.correlation_id),
     )
 
@@ -137,12 +139,12 @@ async def correct_local_record(
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> RecordWriteResponse:
-    record, revision, _, _ = await update_record(
+    record, revision, _, _, sync_status = await update_record(
         db, actor, id, payload, if_match, idempotency_key
     )
     response.headers["ETag"] = f'"{revision.version}"'
     return RecordWriteResponse(
         record=record_view(record, revision),
-        audit_sync_status="SYNCED",
+        audit_sync_status=sync_status,
         correlation_id=UUID(request.state.correlation_id),
     )

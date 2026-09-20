@@ -86,13 +86,13 @@ def _context(
             "CARE_ASSIGNMENT_REQUIRED",
         ),
         (
-            _context("LAB_SCIENTIST", care=False, tasks={"LAB": frozenset({PATIENT})}),
+            _context("LAB_SCIENTIST_RADIOLOGIST", care=False, tasks={"LAB": frozenset({PATIENT})}),
             "C",
             "investigations",
             "ALLOW",
         ),
         (
-            _context("LAB_SCIENTIST", care=False, tasks={"LAB": frozenset({uuid4()})}),
+            _context("LAB_SCIENTIST_RADIOLOGIST", care=False, tasks={"LAB": frozenset({uuid4()})}),
             "R",
             "investigations",
             "CARE_ASSIGNMENT_REQUIRED",

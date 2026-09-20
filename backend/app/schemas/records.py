@@ -107,6 +107,18 @@ class ClinicalRecordView(StrictModel):
     references: list[ClinicalReference]
 
 
+class NormalizedRecord(ClinicalRecordView):
+    """Adapter output: the public record plus the security tags the policy filters on."""
+
+    allowed_roles: list[str]
+    emergency_summary_eligible: bool
+
+    def public(self) -> ClinicalRecordView:
+        return ClinicalRecordView(
+            **self.model_dump(exclude={"allowed_roles", "emergency_summary_eligible"})
+        )
+
+
 class RecordCollection(StrictModel):
     items: list[ClinicalRecordView] = Field(max_length=100)
     next_cursor: str | None = None

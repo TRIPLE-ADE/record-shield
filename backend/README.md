@@ -20,7 +20,7 @@ M1-M4 are complete for the synthetic local vertical slice. Emergency access, adm
 
 - Python 3.13 or newer
 - [`uv`](https://docs.astral.sh/uv/)
-- MySQL 8.4 or PostgreSQL 14+
+- MySQL 8.4 (the included Docker Compose file provides it)
 - Docker Desktop if using the included MySQL container
 
 Install `uv` using the official instructions for your operating system. On Windows, restart PowerShell after installation so `uv` is available on `PATH`.
@@ -52,21 +52,11 @@ Never commit `.env`. Use a long, random `SESSION_SECRET` for any shared environm
 
 ## Database configuration
 
-The application uses async SQLAlchemy and supports both MySQL and PostgreSQL. `DATABASE_URL` may use either the explicit async driver URL or the normal SQLAlchemy URL; the application normalizes the latter automatically.
-
-MySQL examples:
+The application uses async SQLAlchemy on MySQL 8.4 only. `DATABASE_URL` accepts the explicit async driver URL or the plain `mysql://` form; the application normalizes the latter. Any other scheme is rejected at startup.
 
 ```text
 mysql+asyncmy://recordshield:recordshield@localhost:3306/recordshield
 mysql://recordshield:recordshield@localhost:3306/recordshield
-```
-
-PostgreSQL examples:
-
-```text
-postgresql+asyncpg://recordshield:recordshield@localhost:5432/recordshield
-postgresql://recordshield:recordshield@localhost:5432/recordshield
-postgres://recordshield:recordshield@localhost:5432/recordshield
 ```
 
 The MySQL driver requires `cryptography` for MySQL 8 `caching_sha2_password` authentication; it is included in the locked runtime dependencies.
@@ -89,16 +79,6 @@ docker compose ps
 ```
 
 The standard MySQL port must be free. If another MySQL installation is already using port `3306`, stop that service before starting this container, or change both the Compose port mapping and `DATABASE_URL` together.
-
-### PostgreSQL
-
-PostgreSQL is not started by the included Compose file. Start PostgreSQL separately, create the configured database and user, then set `DATABASE_URL` in `.env` before running migrations.
-
-PowerShell example:
-
-```powershell
-$env:DATABASE_URL = "postgresql+asyncpg://recordshield:recordshield@localhost:5432/recordshield"
-```
 
 ## Migrations
 
@@ -123,8 +103,12 @@ Every model change must include a migration. Keep models imported through `app/m
 
 ## Run the API
 
+Three processes: the isolated audit service, Mercy General's mock EMR (a separate vendor system with its own database), and the RecordShield API.
+
 ```bash
-uv run fastapi dev app/main.py
+uv run uvicorn audit_service.main:app --port 8002   # terminal 1
+uv run uvicorn mock_emr.main:app --port 8001        # terminal 2
+uv run fastapi dev app/main.py                       # terminal 3
 ```
 
 Open:
@@ -132,6 +116,42 @@ Open:
 - Health: <http://localhost:8000/api/v1/health>
 - Swagger UI: <http://localhost:8000/docs>
 - ReDoc: <http://localhost:8000/redoc>
+
+### Mercy mock EMR
+
+`mock_emr/` is deliberately outside `app/`: it imports nothing from RecordShield and speaks its own vendor schema (`mrn_patients`, `mrn_records` with `category`, `obs_code`, `note_text`, `security_label`, `roles_csv`, `restricted_csv`). RecordShield reaches it only through `MercyAdapter` with the `X-Service-Key` header; browsers get 401 and writes get 405. It creates its tables and seeds the PRD §18.1 fixture for Musa (`PAT-00291`) on first start.
+
+The database `mercy_emr` and user `mercy_emr` are created by `docker/mysql-init/mercy_emr.sql` on a fresh MySQL volume. For a volume created before that file existed, run it once:
+
+```bash
+docker exec -i recordshield-db-1 mysql -uroot -precordshield-root < docker/mysql-init/mercy_emr.sql
+```
+
+Environment (`.env`): `MERCY_EMR_URL` (default `http://localhost:8001`), `MERCY_EMR_SERVICE_KEY` (shared by both processes), `MERCY_EMR_DATABASE_URL`.
+
+To demonstrate a source outage, stop the mock EMR process: remote reads return `503 SOURCE_UNAVAILABLE` with no payload, discovery reports `UNAVAILABLE`, and the patient portal records an `ABORTED` access row. An emergency activation that hits the outage after its session is committed returns the same 503 with an `emergency_session` reference; retrying with the same `Idempotency-Key` reuses that session.
+
+### Audit service
+
+`audit_service/` is the only component that opens a SQLite file (`AUDIT_DATABASE_PATH`, default `audit.sqlite`). It exposes an append-only API behind `X-Service-Key`: append (idempotent on `event_id`, different content → 409), read a stream, verify a stream, read the head. There is no update or delete route. Streams are `hospital:<organization-uuid>` and `exchange`; their UUIDs are derived deterministically (`audit_service.chain.stream_id_for`). Every event carries the contract's 25 fields; `previous_hash` starts at 64 zeros and `event_hash = SHA256(canonical JSON of every other field)`.
+
+RecordShield writes payload-free outbox rows to `audit_events` in the same MySQL transaction as the state change, then delivers them to the audit process. Clinical reads, emergency evidence and every clinical release **require the receipt first** — if the audit service is down they return `503 AUDIT_UNAVAILABLE` and release nothing. Local writes need a durable `WRITE_INTENT` before committing; the post-commit event may stay `PENDING` (`audit_sync_status`) and is retried by an in-process task at 1, 2, 4, 8, 16 then 30 s. Denials and consent state changes never wait for the audit service.
+
+Security reads: `GET /api/v1/security/events?stream_id=…` (security admins see their hospital stream, the trust operator sees `exchange`) and `POST /api/v1/security/chains/{stream_id}/verify`.
+
+Tamper demonstration on a *copy* of the audit file (never the live one):
+
+```bash
+uv run python -m app.tools.checkpoint --stream hospital:<org-uuid>   # retain a checkpoint in MySQL
+cp audit.sqlite copy.sqlite
+sqlite3 copy.sqlite "UPDATE events SET decision='DENY' WHERE sequence=3"
+uv run python -m audit_service.verify copy.sqlite --stream hospital:<org-uuid> \
+  --checkpoint-sequence <seq> --checkpoint-hash <hash>     # INVALID, HASH_MISMATCH at 3, exit 1
+```
+
+### Emergency access
+
+Break-glass is a separate, audited path (`/api/v1/emergency/...`), not a bypass. It needs an open local EMERGENCY encounter, an eligible on-shift doctor (or a membership the hospital has explicitly configured), and a source that accepts the role. Level 1 returns an eight-section summary built only from source-curated summary-eligible records; restricted data never appears. Level 2 needs the initiating doctor, a necessity narrative and explicit domains permitted by the source's policy. Sessions last 15 minutes and cannot be extended; the activation narrative is due in 5 minutes and, when overdue, blocks expansion but not reads. Expiry and overdue status are computed from the clock on every request. Security admins (`sarah.*`) review and revoke. `critical_conditions` is always `UNKNOWN` in this prototype because no source marker distinguishes it from `major_diagnoses`.
 
 The API adds a correlation ID and `Cache-Control: no-store` to responses. Errors use the contract envelope with an `error.code`, `error.message`, and `correlation_id`.
 
@@ -158,6 +178,8 @@ Synthetic development accounts all use the password `synthetic-example-password`
 | `multi.staff` | Staff member with multiple memberships; a valid `membership_id` is required at login |
 | `musa.patient` | Patient portal account for the synthetic Musa record |
 | `trust.operator` | Unity trust-operator context |
+| `sarah.unity`, `sarah.mercy` | Security admins at each hospital; review and revoke emergency sessions; read and verify their hospital audit stream; no clinical access |
+| `trust.operator` | Reads and verifies the `exchange` audit stream |
 
 Seeded shifts and assignments run from 2026-09-01 to 2026-12-31 UTC. Every request reloads the membership, active shift, care assignments and task assignments from the database; policy denials are recorded in `audit_events` with an internal reason code and returned as a generic 403.
 
@@ -176,20 +198,23 @@ docker compose config --quiet
 git diff --check
 ```
 
-The tests use an isolated async SQLite database so they do not require a running database server. They cover the HTTP boundary for authentication, local records, consent lifecycle, grant scope, revocation, privacy-safe failures, and no-remote-write behavior. Run `alembic upgrade head` separately against the MySQL or PostgreSQL instance you intend to use.
+The tests use an isolated async SQLite database so they do not require a running database server. One MySQL-specific regression (same-hospital emergency read observing a concurrent revoke under REPEATABLE READ) runs only when `RECORDSHIELD_MYSQL_TEST_URL` points at a scratch database it may drop and recreate, e.g. `mysql+asyncmy://recordshield:recordshield@localhost:3306/recordshield_test`. They cover the HTTP boundary for authentication, local records, consent lifecycle, grant scope, revocation, privacy-safe failures, and no-remote-write behavior. Run `alembic upgrade head` separately against the MySQL instance you intend to use.
 
 ## Project layout
 
 ```text
 app/
-  main.py                 FastAPI application and exception handlers
-  core/                   settings, database, middleware, errors, primitives
+  main.py                 FastAPI application, exception handlers, audit outbox task
+  core/                   settings, database, middleware, errors, primitives, clock
   api/v1/routes/          thin HTTP route modules
   models/                 SQLAlchemy entities and metadata exports
   schemas/                Pydantic request/response models
-  services/               authorization and domain business logic
-migrations/               Alembic environment and versioned migrations
-tests/                    async HTTP integration tests
+  services/               policy engine, context, auth, local workspace, exchange, portal, adapter
+audit_service/            Isolated audit process: SQLite, hash chains, verification, offline verifier
+mock_emr/                 Mercy General's mock EMR: separate app, schema and private API
+docker/mysql-init/        SQL applied to a fresh MySQL volume (creates the mercy_emr database)
+migrations/               Alembic environment and versioned migrations (RecordShield schema only)
+tests/                    async HTTP integration tests; the mock EMR is mounted in-process
 ```
 
 ## Adding dependencies

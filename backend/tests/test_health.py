@@ -4,6 +4,7 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 from sqlalchemy import update
 
 from app.core.config import Settings
@@ -23,18 +24,18 @@ def test_health() -> None:
     assert response.headers["Cache-Control"] == "no-store"
 
 
-def test_database_url_supports_mysql_and_postgres() -> None:
+def test_database_url_is_mysql_only() -> None:
     mysql = Settings(
         database_url="mysql://recordshield:recordshield@localhost:3306/recordshield",
         session_secret="test-session-secret",
     )
-    postgres = Settings(
-        database_url="postgres://recordshield:recordshield@localhost:5433/recordshield",
-        session_secret="test-session-secret",
-    )
-
     assert mysql.database_url.startswith("mysql+asyncmy://")
-    assert postgres.database_url.startswith("postgresql+asyncpg://")
+
+    with pytest.raises(ValidationError):
+        Settings(
+            database_url="postgresql://recordshield:recordshield@localhost:5432/recordshield",
+            session_secret="test-session-secret",
+        )
 
 
 def test_m1_probe_is_validated_and_idempotent() -> None:

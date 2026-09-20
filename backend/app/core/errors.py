@@ -15,6 +15,7 @@ class ApiError(Exception):
         message: str,
         details: list[dict[str, str]] | None = None,
         headers: Mapping[str, str] | None = None,
+        extra: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
@@ -22,6 +23,7 @@ class ApiError(Exception):
         self.message = message
         self.details = details
         self.headers = headers
+        self.extra = extra
 
 
 def _correlation_id(request: Request) -> str:
@@ -35,6 +37,7 @@ def _response(
     message: str,
     details: list[dict[str, str]] | None = None,
     headers: Mapping[str, str] | None = None,
+    extra: Mapping[str, Any] | None = None,
 ) -> JSONResponse:
     error: dict[str, Any] = {"code": code, "message": message}
     if details:
@@ -42,7 +45,7 @@ def _response(
 
     response = JSONResponse(
         status_code=status_code,
-        content={"error": error, "correlation_id": _correlation_id(request)},
+        content={"error": error, "correlation_id": _correlation_id(request), **(extra or {})},
         headers={"Cache-Control": "no-store", "X-Correlation-ID": _correlation_id(request)},
     )
     if headers:
@@ -59,6 +62,7 @@ async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
         exc.message,
         exc.details,
         exc.headers,
+        exc.extra,
     )
 
 

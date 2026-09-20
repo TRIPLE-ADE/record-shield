@@ -331,6 +331,8 @@ class AuthService:
                 raise ApiError(
                     503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable."
                 )
+            if org.status == "SUSPENDED":
+                raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
             organization = {"organization_id": org.id, "name": org.name, "mode": org.mode}
             current_shift = await active_shift(db, membership.id)
             if current_shift:

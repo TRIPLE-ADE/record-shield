@@ -68,6 +68,7 @@ def upgrade() -> None:
                 "password_hash": PASSWORD_HASH,
                 "verified": True,
                 "active": True,
+                "patient_id": None,
             },
             {
                 "id": UUID("00000000-0000-4000-8000-000000000007"),
@@ -76,6 +77,7 @@ def upgrade() -> None:
                 "password_hash": PASSWORD_HASH,
                 "verified": True,
                 "active": True,
+                "patient_id": None,
             },
             {
                 "id": UUID("00000000-0000-4000-8000-000000000008"),
@@ -93,6 +95,7 @@ def upgrade() -> None:
                 "password_hash": PASSWORD_HASH,
                 "verified": True,
                 "active": True,
+                "patient_id": None,
             },
         ],
     )

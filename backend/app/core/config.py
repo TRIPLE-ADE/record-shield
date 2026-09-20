@@ -10,24 +10,24 @@ class Settings(BaseSettings):
     database_url: str
     session_secret: str
     m1_test_key: str = "m1-development-only"
+    mercy_emr_url: str = "http://localhost:8001"
+    mercy_emr_service_key: str = "mercy-emr-dev-service-key"
+    source_timeout_seconds: float = 5.0
+    audit_service_url: str = "http://localhost:8002"
+    audit_service_key: str = "audit-dev-service-key"
+    audit_timeout_seconds: float = 5.0
+    audit_worker_enabled: bool = True
+    audit_worker_interval_seconds: float = 5.0
 
     @field_validator("database_url")
     @classmethod
     def normalize_database_url(cls, value: str) -> str:
         value = value.strip()
-        replacements = {
-            "mysql://": "mysql+asyncmy://",
-            "postgresql://": "postgresql+asyncpg://",
-            "postgres://": "postgresql+asyncpg://",
-        }
-        for source, target in replacements.items():
-            if value.startswith(source):
-                return target + value[len(source) :]
-        if value.startswith(("mysql+asyncmy://", "postgresql+asyncpg://")):
+        if value.startswith("mysql://"):
+            return "mysql+asyncmy://" + value[len("mysql://") :]
+        if value.startswith("mysql+asyncmy://"):
             return value
-        raise ValueError(
-            "DATABASE_URL must use a supported MySQL or PostgreSQL async URL"
-        )
+        raise ValueError("DATABASE_URL must be a MySQL URL (mysql:// or mysql+asyncmy://)")
 
 
 settings = Settings()

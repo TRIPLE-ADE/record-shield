@@ -20,6 +20,7 @@ from app.models import (
     ClinicalRecord,
     ClinicalRecordRevision,
     Encounter,
+    HospitalPolicy,
     IdempotencyRecord,
     Organization,
     Patient,
@@ -32,11 +33,13 @@ from app.schemas.records import (
     RecordCorrection,
     RecordCreate,
 )
-from app.services.context import current_ward
+from app.services import audit
+from app.services.context import current_ward, emergency_policy
 from app.services.policy import (
     CLERK_ROLES,
     DOCTOR_ROLES,
     SENSITIVE_DOMAINS,
+    evaluate_emergency_eligibility,
     evaluate_encounter_creation,
     evaluate_local_domain,
 )
@@ -143,20 +146,15 @@ async def _deny(
     resource_id: UUID,
     metadata: dict[str, Any],
 ) -> None:
-    db.add(
-        AuditEvent(
-            id=uuid4(),
-            actor_id=actor.user.id,
-            organization_id=actor.organization.id if actor.organization else None,
-            action="ACCESS_DENIED",
-            resource_type=resource_type,
-            resource_id=resource_id,
-            metadata_json={"reason_code": reason_code, **metadata},
-            occurred_at=_now(),
-        )
+    await audit.deny(
+        db,
+        actor.user.id,
+        actor.organization.id if actor.organization else None,
+        reason_code,
+        resource_type,
+        resource_id,
+        metadata,
     )
-    await db.commit()
-    raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
 
 
 async def _authorize_domain(
@@ -185,6 +183,42 @@ async def _authorize_domain(
             patient_id,
             {"domain": domain, "action": action},
         )
+
+
+async def _write_intent(
+    db: AsyncSession,
+    actor: Actor,
+    organization_id: UUID,
+    patient_id: UUID,
+    record_id: UUID,
+    domain: str,
+) -> None:
+    """PRD §13.2: a durable WRITE_INTENT must exist before a clinical write commits."""
+    intent = audit.event(
+        actor.user.id,
+        organization_id,
+        "WRITE_INTENT",
+        "clinical_record",
+        record_id,
+        {"domain": domain},
+        decision="ALLOW",
+        reason_code="LOCAL_WRITE",
+        patient_ref=patient_id,
+        resource_domain=domain,
+        role_snapshot=actor.membership.role if actor.membership else None,
+    )
+    db.add(intent)
+    await db.commit()
+    await audit.require_ack(db, [intent])
+
+
+async def _sync_status(db: AsyncSession, record_id: UUID, action: str) -> str:
+    state = await db.scalar(
+        select(AuditEvent.delivery_state).where(
+            AuditEvent.resource_id == record_id, AuditEvent.action == action
+        )
+    )
+    return "SYNCED" if state == "DELIVERED" else "PENDING"
 
 
 def _validate_payload(domain: str, subtype: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -272,6 +306,18 @@ async def create_encounter(
     if actor.context is None:
         raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
     decision = evaluate_encounter_creation(actor.context.policy, payload.type)
+    if decision.allowed and payload.type == "EMERGENCY":
+        # Contract §08: an emergency encounter needs receiving-hospital eligibility; the source's
+        # own checks happen at activation, so the receiving policy stands in for both here.
+        receiving = await db.scalar(
+            select(HospitalPolicy).where(HospitalPolicy.organization_id == organization_id)
+        )
+        if receiving is None:
+            raise ApiError(503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable.")
+        snapshot = emergency_policy(receiving)
+        decision = evaluate_emergency_eligibility(
+            actor.context.policy, actor.membership.id, snapshot, snapshot
+        )
     if not decision.allowed:
         await _deny(
             db, actor, decision.reason_code, "patient", payload.patient_id, {"type": payload.type}
@@ -312,18 +358,19 @@ async def create_encounter(
         version=1,
     )
     db.add(encounter)
-    db.add(
-        AuditEvent(
-            id=uuid4(),
-            actor_id=actor.user.id,
-            organization_id=organization_id,
-            action="ENCOUNTER_CREATED",
-            resource_type="encounter",
-            resource_id=encounter.id,
-            metadata_json={"type": payload.type},
-            occurred_at=_now(),
-        )
+    created = audit.event(
+        actor.user.id,
+        organization_id,
+        "ENCOUNTER_CREATED",
+        "encounter",
+        encounter.id,
+        {"type": payload.type, "ward_id": str(ward.id)},
+        decision="ALLOW",
+        reason_code="ENCOUNTER_CREATED",
+        patient_ref=patient.id,
+        role_snapshot=actor.membership.role,
     )
+    db.add(created)
     db.add(
         IdempotencyRecord(
             id=uuid4(),
@@ -339,6 +386,7 @@ async def create_encounter(
         )
     )
     await db.commit()
+    await audit.deliver(db, [created])
     await db.refresh(encounter)
     return encounter
 
@@ -416,7 +464,7 @@ async def create_record(
         parts = await _record_parts(db, existing.resource_id)
         if parts is None:
             raise ApiError(503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable.")
-        return parts
+        return (*parts, await _sync_status(db, existing.resource_id, "LOCAL_RECORD_CREATED"))
     patient = await db.scalar(
         select(Patient).where(Patient.id == patient_id, Patient.organization_id == organization_id)
     )
@@ -427,8 +475,10 @@ async def create_record(
     observed_at = payload.observed_at
     if observed_at.tzinfo is None or observed_at.utcoffset() is None or observed_at > now:
         raise ApiError(422, "VALIDATION_ERROR", "observed_at must be a UTC time no later than now.")
+    record_id = uuid4()
+    await _write_intent(db, actor, organization_id, patient.id, record_id, domain)
     record = ClinicalRecord(
-        id=uuid4(),
+        id=record_id,
         patient_id=patient.id,
         encounter_id=encounter.id,
         organization_id=organization_id,
@@ -454,18 +504,20 @@ async def create_record(
     )
     db.add(record)
     db.add(revision)
-    db.add(
-        AuditEvent(
-            id=uuid4(),
-            actor_id=actor.user.id,
-            organization_id=organization_id,
-            action="LOCAL_RECORD_CREATED",
-            resource_type="clinical_record",
-            resource_id=record.id,
-            metadata_json={"domain": domain, "version": 1},
-            occurred_at=now,
-        )
+    written = audit.event(
+        actor.user.id,
+        organization_id,
+        "LOCAL_RECORD_CREATED",
+        "clinical_record",
+        record.id,
+        {"domain": domain, "version": 1, "encounter_id": str(encounter.id)},
+        decision="ALLOW",
+        reason_code="LOCAL_WRITE",
+        patient_ref=patient.id,
+        resource_domain=domain,
+        role_snapshot=actor.membership.role,
     )
+    db.add(written)
     db.add(
         IdempotencyRecord(
             id=uuid4(),
@@ -481,10 +533,11 @@ async def create_record(
         )
     )
     await db.commit()
+    synced = await audit.deliver(db, [written])
     parts = await _record_parts(db, record.id)
     if parts is None:
         raise ApiError(503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable.")
-    return parts
+    return (*parts, "SYNCED" if synced else "PENDING")
 
 
 async def update_record(
@@ -516,11 +569,12 @@ async def update_record(
         replay = await _record_parts(db, existing.resource_id)
         if replay is None:
             raise ApiError(503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable.")
-        return replay
+        return (*replay, await _sync_status(db, existing.resource_id, "LOCAL_RECORD_CORRECTED"))
     if record.current_version != expected_version:
         raise ApiError(409, "VERSION_CONFLICT", "The record version is no longer current.")
     normalized_payload = _validate_payload(record.domain, record.subtype, payload.payload)
     now = _now()
+    await _write_intent(db, actor, organization.id, patient.id, record.id, record.domain)
     observed_at = payload.observed_at or current.observed_at
     if observed_at.tzinfo is None or observed_at.utcoffset() is None:
         observed_at = observed_at.replace(tzinfo=UTC)
@@ -544,18 +598,20 @@ async def update_record(
     )
     record.current_version = next_version
     db.add(revision)
-    db.add(
-        AuditEvent(
-            id=uuid4(),
-            actor_id=actor.user.id,
-            organization_id=organization.id,
-            action="LOCAL_RECORD_CORRECTED",
-            resource_type="clinical_record",
-            resource_id=record.id,
-            metadata_json={"domain": record.domain, "version": next_version},
-            occurred_at=now,
-        )
+    corrected = audit.event(
+        actor.user.id,
+        organization.id,
+        "LOCAL_RECORD_CORRECTED",
+        "clinical_record",
+        record.id,
+        {"domain": record.domain, "version": next_version},
+        decision="ALLOW",
+        reason_code="LOCAL_WRITE",
+        patient_ref=patient.id,
+        resource_domain=record.domain,
+        role_snapshot=actor.membership.role,
     )
+    db.add(corrected)
     db.add(
         IdempotencyRecord(
             id=uuid4(),
@@ -571,10 +627,11 @@ async def update_record(
         )
     )
     await db.commit()
+    synced = await audit.deliver(db, [corrected])
     updated = await _record_parts(db, record.id)
     if updated is None:
         raise ApiError(503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable.")
-    return updated
+    return (*updated, "SYNCED" if synced else "PENDING")
 
 
 def record_view(
@@ -617,6 +674,7 @@ async def list_records(
     purpose: str,
     limit: int,
     cursor: str | None,
+    correlation_id: UUID,
 ) -> tuple[list[ClinicalRecordView], str | None, Organization, datetime]:
     organization_id = _organization(actor)
     ward_id = await current_ward(db, patient_id, organization_id)
@@ -673,6 +731,23 @@ async def list_records(
             }
         )
     retrieved_at = _now()
+    # PRD §13.2: a clinical read needs the audit process's receipt before anything is released.
+    read = audit.event(
+        actor.user.id,
+        organization_id,
+        "LOCAL_RECORDS_READ",
+        "patient",
+        patient_id,
+        {"domain": domain, "purpose": purpose, "released_count": len(visible)},
+        decision="ALLOW",
+        reason_code="CONTEXT_ALLOWED",
+        resource_domain=domain,
+        correlation_id=correlation_id,
+        role_snapshot=actor.membership.role if actor.membership else None,
+    )
+    db.add(read)
+    await db.commit()
+    await audit.require_ack(db, [read])
     return (
         [record_view(record, revision, retrieved_at) for record, revision in visible],
         next_cursor,

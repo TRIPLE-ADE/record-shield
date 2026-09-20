@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from threading import Lock
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -15,7 +16,11 @@ from app.models import (
     ConsentGrant,
     ConsentRequest,
     Encounter,
+    ExchangeTransaction,
+    HospitalPolicy,
     IdempotencyRecord,
+    Membership,
+    Notification,
     Organization,
     Patient,
     SourceLink,
@@ -29,10 +34,24 @@ from app.schemas.exchange import (
     ConsentRequestView,
     ExpectedVersion,
 )
-from app.schemas.records import ClinicalRecordView
+from app.schemas.records import ClinicalRecordView, NormalizedRecord
+from app.services import audit
+from app.services.context import active_shift, emergency_policy
 from app.services.local_workspace import _idempotency, _require_key
 from app.services.policy import DOCTOR_ROLES as PROVIDER_ROLES
-from app.services.source_adapter import source_adapters
+from app.services.policy import (
+    EMERGENCY_PLATFORM_ROLES,
+    RESTRICTED_DOMAINS,
+    evaluate_emergency_eligibility,
+    evaluate_local_domain,
+)
+from app.services.source_adapter import SourceSchemaError, SourceUnavailable, source_adapters
+
+DISCOVERY_WINDOW = timedelta(minutes=1)
+DISCOVERY_LIMIT = 20
+SOURCE_FETCH_LIMIT = 200
+_discovery_calls: dict[UUID, list[datetime]] = {}
+_discovery_lock = Lock()
 
 EXCHANGE_DOMAINS = {
     "demographics",
@@ -49,6 +68,7 @@ EXCHANGE_DOMAINS = {
     "hiv",
     "genetic",
 }
+SENSITIVITY_ORDER = {"STANDARD": 0, "SENSITIVE": 1, "RESTRICTED": 2}
 
 
 def _now() -> datetime:
@@ -67,10 +87,89 @@ def _expired(value: datetime) -> bool:
     return _utc(value) <= _now()
 
 
+def _sensitivity_rank(domain_or_label: str) -> int:
+    if domain_or_label in RESTRICTED_DOMAINS or domain_or_label == "RESTRICTED":
+        return SENSITIVITY_ORDER["RESTRICTED"]
+    if domain_or_label in EXCHANGE_DOMAINS - {"demographics"} or domain_or_label == "SENSITIVE":
+        return SENSITIVITY_ORDER["SENSITIVE"]
+    return SENSITIVITY_ORDER["STANDARD"]
+
+
 def _provider(actor: Actor) -> UUID:
     if actor.membership is None or actor.membership.role not in PROVIDER_ROLES:
         raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
     return actor.organization_id
+
+
+def reset_rate_limits() -> None:
+    with _discovery_lock:
+        _discovery_calls.clear()
+
+
+def _rate_limit_discovery(user_id: UUID) -> None:
+    now = _now()
+    with _discovery_lock:
+        calls = [
+            item for item in _discovery_calls.get(user_id, []) if now - item < DISCOVERY_WINDOW
+        ]
+        if len(calls) >= DISCOVERY_LIMIT:
+            _discovery_calls[user_id] = calls
+            retry_after = int((calls[0] + DISCOVERY_WINDOW - now).total_seconds()) + 1
+            raise ApiError(
+                429,
+                "RATE_LIMITED",
+                "Too many discovery requests. Try again later.",
+                headers={"Retry-After": str(max(retry_after, 1))},
+            )
+        calls.append(now)
+        _discovery_calls[user_id] = calls
+
+
+async def source_policy(
+    db: AsyncSession, organization_id: UUID, fresh: bool = False
+) -> HospitalPolicy:
+    statement = select(HospitalPolicy).where(HospitalPolicy.organization_id == organization_id)
+    if fresh:
+        statement = statement.execution_options(populate_existing=True)
+    policy = await db.scalar(statement)
+    if policy is None:
+        raise ApiError(503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable.")
+    return policy
+
+
+def _notify(
+    patient_id: UUID,
+    event_id: UUID,
+    notification_type: str,
+    metadata: dict[str, Any],
+) -> Notification:
+    return Notification(
+        id=uuid4(),
+        patient_id=patient_id,
+        event_id=event_id,
+        notification_type=notification_type,
+        metadata_json=metadata,
+        created_at=_now(),
+        seen_at=None,
+    )
+
+
+def _consent_metadata(
+    request: ConsentRequest,
+    domains: list[str],
+    status: str,
+    grant_id: UUID | None = None,
+) -> dict[str, Any]:
+    return {
+        "source_org_id": str(request.source_org_id),
+        "recipient_org_id": str(request.recipient_org_id),
+        "practitioner_id": str(request.requesting_practitioner_id),
+        "request_id": str(request.id),
+        "grant_id": str(grant_id) if grant_id else None,
+        "session_id": None,
+        "domains": domains,
+        "status": status,
+    }
 
 
 def _source_view(source: Organization) -> dict[str, Any]:
@@ -172,13 +271,86 @@ def grant_view(
     )
 
 
+async def _require_treatment_context(
+    db: AsyncSession, actor: Actor, patient_id: UUID, ward_id: UUID | None
+) -> None:
+    """The caller must currently be treating this patient: shift, care assignment and ward."""
+    if actor.context is None:
+        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
+    decision = evaluate_local_domain(
+        actor.context.policy, "R", "demographics", patient_id, ward_id
+    )
+    if not decision.allowed:
+        await audit.deny(
+            db,
+            actor.user.id,
+            actor.organization_id,
+            decision.reason_code,
+            "patient",
+            patient_id,
+            {"operation": "exchange"},
+        )
+
+
+async def _require_request_ceiling(
+    db: AsyncSession,
+    actor: Actor,
+    patient_id: UUID,
+    ward_id: UUID | None,
+    source_org_id: UUID,
+    domains: list[str],
+) -> None:
+    """Each requested domain must be readable by this role in context and disclosable by source."""
+    assert actor.context is not None
+    policy = await source_policy(db, source_org_id)
+    for domain in domains:
+        decision = evaluate_local_domain(actor.context.policy, "R", domain, patient_id, ward_id)
+        if not decision.allowed:
+            await audit.deny(
+                db,
+                actor.user.id,
+                actor.organization_id,
+                decision.reason_code,
+                "patient",
+                patient_id,
+                {"operation": "consent_request", "domain": domain},
+            )
+        if domain not in policy.normal_disclosure_domains:
+            await audit.deny(
+                db,
+                actor.user.id,
+                actor.organization_id,
+                "SENSITIVITY_DENIED",
+                "patient",
+                patient_id,
+                {"operation": "consent_request", "domain": domain, "source_policy": True},
+            )
+        if _sensitivity_rank(domain) > _sensitivity_rank(policy.normal_max_sensitivity):
+            await audit.deny(
+                db,
+                actor.user.id,
+                actor.organization_id,
+                "SENSITIVITY_DENIED",
+                "patient",
+                patient_id,
+                {"operation": "consent_request", "domain": domain, "source_policy": True},
+            )
+
+
 async def discover_sources(
     db: AsyncSession,
     actor: Actor,
     patient_id: UUID,
     receiving_encounter_id: UUID,
+    purpose: str = "treatment",
 ) -> list[tuple[Organization, str]]:
-    recipient_org_id = _provider(actor)
+    if purpose == "emergency_treatment":
+        if actor.membership is None or actor.membership.role not in EMERGENCY_PLATFORM_ROLES:
+            raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
+        recipient_org_id = actor.organization_id
+    else:
+        recipient_org_id = _provider(actor)
+    _rate_limit_discovery(actor.user.id)
     encounter = await db.scalar(
         select(Encounter).where(
             Encounter.id == receiving_encounter_id,
@@ -194,6 +366,27 @@ async def discover_sources(
     )
     if patient is None:
         raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+    if purpose == "emergency_treatment":
+        # Contract §09: emergency discovery needs an open EMERGENCY encounter and receiving
+        # eligibility; ward and care assignment are not required on this path.
+        if encounter.encounter_type != "EMERGENCY" or actor.context is None:
+            raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+        receiving = emergency_policy(await source_policy(db, recipient_org_id))
+        decision = evaluate_emergency_eligibility(
+            actor.context.policy, actor.membership.id, receiving, receiving
+        )
+        if not decision.allowed:
+            await audit.deny(
+                db,
+                actor.user.id,
+                recipient_org_id,
+                decision.reason_code,
+                "patient",
+                patient_id,
+                {"operation": "exchange", "purpose": purpose},
+            )
+    else:
+        await _require_treatment_context(db, actor, patient_id, encounter.ward_id)
     rows = await db.execute(
         select(SourceLink, Organization)
         .join(Organization, Organization.id == SourceLink.source_org_id)
@@ -208,7 +401,7 @@ async def discover_sources(
         if _link.availability != "AVAILABLE":
             availability = _link.availability
         else:
-            availability = await adapter.check_availability(patient_id) if adapter else "UNKNOWN"
+            availability = await adapter.health_check() if adapter else "UNKNOWN"
         items.append((organization, availability))
     return items
 
@@ -246,6 +439,15 @@ async def create_consent_request(
     )
     if source_link is None or encounter is None or payload.source_org_id not in source_adapters:
         raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+    await _require_treatment_context(db, actor, payload.patient_id, encounter.ward_id)
+    await _require_request_ceiling(
+        db,
+        actor,
+        payload.patient_id,
+        encounter.ward_id,
+        payload.source_org_id,
+        list(payload.requested_domains),
+    )
     fingerprint = request_fingerprint(
         str(actor.user.id), "POST", "/consent/requests", payload.model_dump(mode="json")
     )
@@ -255,6 +457,15 @@ async def create_consent_request(
         if parts is None:
             raise ApiError(503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable.")
         return parts
+    portal_account = await db.scalar(
+        select(User).where(User.kind == "PATIENT", User.patient_id == payload.patient_id)
+    )
+    if portal_account is None:
+        raise ApiError(
+            409,
+            "CONSENT_CHANNEL_UNAVAILABLE",
+            "The patient has no portal account to receive consent requests.",
+        )
     source = await db.get(Organization, payload.source_org_id)
     recipient = await db.get(Organization, recipient_org_id)
     now = _now()
@@ -288,22 +499,34 @@ async def create_consent_request(
             created_at=now,
         )
     )
+    event = audit.event(
+        actor.user.id,
+        recipient_org_id,
+        "CONSENT_REQUESTED",
+        "consent_request",
+        request.id,
+        {"source_org_id": str(payload.source_org_id), "domains": payload.requested_domains},
+        stream=audit.EXCHANGE_STREAM,
+        decision="ALLOW",
+        reason_code="CONSENT_REQUESTED",
+        patient_ref=request.patient_id,
+        source_org=payload.source_org_id,
+        recipient_org=recipient_org_id,
+        reference_id=request.id,
+        role_snapshot=actor.membership.role,
+        occurred_at=now,
+    )
+    db.add(event)
     db.add(
-        AuditEvent(
-            id=uuid4(),
-            actor_id=actor.user.id,
-            organization_id=recipient_org_id,
-            action="CONSENT_REQUESTED",
-            resource_type="consent_request",
-            resource_id=request.id,
-            metadata_json={
-                "source_org_id": str(payload.source_org_id),
-                "domains": payload.requested_domains,
-            },
-            occurred_at=now,
+        _notify(
+            request.patient_id,
+            event.id,
+            "CONSENT_REQUESTED",
+            _consent_metadata(request, list(payload.requested_domains), "PENDING"),
         )
     )
     await db.commit()
+    await audit.deliver(db, [event])
     parts = await _request_parts(db, request.id)
     if parts is None or source is None or recipient is None:
         raise ApiError(503, "SERVICE_UNAVAILABLE", "The RecordShield service is unavailable.")
@@ -454,19 +677,33 @@ async def approve_consent(
             created_at=now,
         )
     )
+    event = audit.event(
+        actor.user.id,
+        None,
+        "CONSENT_APPROVED",
+        "consent_grant",
+        grant.id,
+        {"domains": selected, "request_id": str(request.id)},
+        stream=audit.EXCHANGE_STREAM,
+        decision="ALLOW",
+        reason_code="PATIENT_APPROVED",
+        patient_ref=request.patient_id,
+        source_org=request.source_org_id,
+        recipient_org=request.recipient_org_id,
+        reference_id=grant.id,
+        occurred_at=now,
+    )
+    db.add(event)
     db.add(
-        AuditEvent(
-            id=uuid4(),
-            actor_id=actor.user.id,
-            organization_id=request.recipient_org_id,
-            action="CONSENT_APPROVED",
-            resource_type="consent_grant",
-            resource_id=grant.id,
-            metadata_json={"domains": selected},
-            occurred_at=now,
+        _notify(
+            request.patient_id,
+            event.id,
+            "CONSENT_CHANGED",
+            _consent_metadata(request, selected, "APPROVED", grant.id),
         )
     )
     await db.commit()
+    await audit.deliver(db, [event])
     return request, grant, source, recipient
 
 
@@ -534,19 +771,33 @@ async def transition_request(
             created_at=now,
         )
     )
+    event = audit.event(
+        actor.user.id,
+        None,
+        f"CONSENT_{target_status}",
+        "consent_request",
+        request.id,
+        {},
+        stream=audit.EXCHANGE_STREAM,
+        decision="NOT_APPLICABLE",
+        reason_code=f"CONSENT_{target_status}",
+        patient_ref=request.patient_id,
+        source_org=request.source_org_id,
+        recipient_org=request.recipient_org_id,
+        reference_id=request.id,
+        occurred_at=now,
+    )
+    db.add(event)
     db.add(
-        AuditEvent(
-            id=uuid4(),
-            actor_id=actor.user.id,
-            organization_id=request.recipient_org_id,
-            action=f"CONSENT_{target_status}",
-            resource_type="consent_request",
-            resource_id=request.id,
-            metadata_json={},
-            occurred_at=now,
+        _notify(
+            request.patient_id,
+            event.id,
+            "CONSENT_CHANGED",
+            _consent_metadata(request, list(request.requested_domains), target_status),
         )
     )
     await db.commit()
+    await audit.deliver(db, [event])
     return request, source, recipient
 
 
@@ -600,20 +851,113 @@ async def revoke_consent(
             created_at=now,
         )
     )
-    db.add(
-        AuditEvent(
-            id=uuid4(),
-            actor_id=actor.user.id,
-            organization_id=grant.recipient_org_id,
-            action="CONSENT_REVOKED",
-            resource_type="consent_grant",
-            resource_id=grant.id,
-            metadata_json={},
-            occurred_at=now,
-        )
+    event = audit.event(
+        actor.user.id,
+        None,
+        "CONSENT_REVOKED",
+        "consent_grant",
+        grant.id,
+        {},
+        stream=audit.EXCHANGE_STREAM,
+        decision="NOT_APPLICABLE",
+        reason_code="PATIENT_REVOKED",
+        patient_ref=grant.patient_id,
+        source_org=grant.source_org_id,
+        recipient_org=grant.recipient_org_id,
+        reference_id=grant.id,
+        occurred_at=now,
     )
+    db.add(event)
+    request = await db.get(ConsentRequest, grant.request_id)
+    if request is not None:
+        db.add(
+            _notify(
+                grant.patient_id,
+                event.id,
+                "CONSENT_CHANGED",
+                _consent_metadata(request, list(grant.domains), "REVOKED", grant.id),
+            )
+        )
     await db.commit()
+    await audit.deliver(db, [event])
     return grant, source, recipient
+
+
+def _exchange_events(
+    actor: Actor,
+    grant: ConsentGrant,
+    transaction: ExchangeTransaction,
+    specs: list[tuple[str, str, UUID | None, str]],
+    domains: list[str],
+    policy_version: int,
+    extra: dict[str, Any] | None = None,
+    occurred_at: datetime | None = None,
+) -> list[AuditEvent]:
+    """The correlated evidence set for one remote read: every event shares the correlation id and
+    the grant reference; each lands in its own stream (PRD D10, AC20)."""
+    rows = []
+    for event_type, stream, organization_id, reason in specs:
+        rows.append(
+            audit.event(
+                actor.user.id,
+                organization_id,
+                event_type,
+                "consent_grant",
+                grant.id,
+                {
+                    "domains": list(domains),
+                    "transaction_id": str(transaction.id),
+                    "grant_version": grant.version,
+                    **(extra or {}),
+                },
+                stream=stream,
+                decision="ALLOW",
+                reason_code=reason,
+                patient_ref=grant.patient_id,
+                source_org=grant.source_org_id,
+                recipient_org=grant.recipient_org_id,
+                policy_version=policy_version,
+                reference_id=grant.id,
+                correlation_id=transaction.correlation_id,
+                role_snapshot=actor.membership.role if actor.membership else None,
+                occurred_at=occurred_at,
+            )
+        )
+    return rows
+
+
+def _visible(
+    record: NormalizedRecord,
+    grant: ConsentGrant,
+    policy: HospitalPolicy,
+    role: str,
+    sensitive_access: bool,
+) -> bool:
+    """FR14: filter on domain, source ceiling, restricted-tag dependency and role relevance."""
+    if record.domain not in grant.domains:
+        return False
+    if (
+        record.sensitivity == "RESTRICTED"
+        and not record.restricted_tags
+        and record.domain not in RESTRICTED_DOMAINS
+    ):
+        return False
+    if record.domain not in policy.normal_disclosure_domains:
+        return False
+    if _sensitivity_rank(record.sensitivity) > _sensitivity_rank(policy.normal_max_sensitivity):
+        return False
+    if not set(record.restricted_tags).issubset(set(grant.domains)):
+        return False
+    if (record.domain in RESTRICTED_DOMAINS or record.restricted_tags) and not sensitive_access:
+        return False
+    if record.allowed_roles and role not in record.allowed_roles:
+        return False
+    return True
+
+
+async def _settle(db: AsyncSession, transaction: ExchangeTransaction, state: str) -> None:
+    transaction.state = state
+    await db.commit()
 
 
 async def read_remote_records(
@@ -625,6 +969,7 @@ async def read_remote_records(
     domains: list[str],
     limit: int,
     cursor: str | None,
+    correlation_id: UUID,
 ) -> tuple[list[ClinicalRecordView], str | None, Organization, datetime]:
     parts = await _grant_parts(db, grant_id)
     if parts is None:
@@ -656,13 +1001,30 @@ async def read_remote_records(
         )
     )
     adapter = source_adapters.get(source_id)
-    if (
-        link is None
-        or link.availability != "AVAILABLE"
-        or adapter is None
-        or await adapter.check_availability(patient_id) != "AVAILABLE"
-    ):
+    if link is None or link.availability != "AVAILABLE" or adapter is None:
         raise ApiError(503, "SOURCE_UNAVAILABLE", "The source system is unavailable.")
+    request = await db.get(ConsentRequest, grant.request_id)
+    encounter = await db.get(Encounter, request.receiving_encounter_id) if request else None
+    if encounter is None or encounter.status != "OPEN":
+        await audit.deny(
+            db,
+            actor.user.id,
+            actor.organization_id,
+            "CARE_ASSIGNMENT_REQUIRED",
+            "consent_grant",
+            grant.id,
+            {"operation": "remote_read", "encounter_open": False},
+        )
+    if actor.context is None or not actor.context.policy.shift_active:
+        await audit.deny(
+            db,
+            actor.user.id,
+            actor.organization_id,
+            "SHIFT_INACTIVE",
+            "consent_grant",
+            grant.id,
+            {"operation": "remote_read"},
+        )
 
     offset = 0
     if cursor:
@@ -680,20 +1042,69 @@ async def read_remote_records(
         if not isinstance(offset, int) or offset < 0:
             raise ApiError(422, "VALIDATION_ERROR", "The cursor is invalid.")
 
-    # Re-check the grant immediately before the source read so revocation cannot
-    # be bypassed by a stale authorization decision.
-    await db.refresh(grant)
-    if grant.status != "ACTIVE" or _expired(grant.expires_at):
-        raise ApiError(403, "GRANT_REVOKED", "The consent grant is no longer active.")
-    if actor.context is None or not actor.context.policy.shift_active:
-        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
-    rows = await adapter.read_records(
-        patient_id, link.source_local_patient_id, domains, limit + 1, offset
+    policy = await source_policy(db, source_id)
+    role = actor.membership.role
+    sensitive_access = patient_id in actor.context.policy.sensitive_patient_ids
+
+    transaction = ExchangeTransaction(
+        id=uuid4(),
+        correlation_id=correlation_id,
+        actor_id=actor.user.id,
+        patient_id=patient_id,
+        source_org_id=source_id,
+        recipient_org_id=recipient.id,
+        basis="CONSENT",
+        basis_id=grant.id,
+        grant_version=grant.version,
+        domains=list(domains),
+        purpose="treatment",
+        state="PREPARED",
+        decision_time=_now(),
+        released_at=None,
     )
-    visible = rows[:limit]
-    items = [ClinicalRecordView(**row) for row in visible]
+    db.add(transaction)
+    # PRD §10.3 steps 4-5: the exchange decision and the source's DISCLOSURE_PREPARED are durable
+    # before the adapter is called; without the receipts nothing is fetched.
+    prepared = _exchange_events(
+        actor,
+        grant,
+        transaction,
+        [
+            ("EXCHANGE_DECISION", audit.EXCHANGE_STREAM, None, "CONSENT_ALLOWED"),
+            ("DISCLOSURE_PREPARED", audit.hospital_stream(source_id), source_id, "CONSENT_ALLOWED"),
+        ],
+        domains,
+        policy.version,
+    )
+    db.add_all(prepared)
+    await db.commit()
+    try:
+        await audit.require_ack(db, prepared)
+    except ApiError:
+        await _settle(db, transaction, "ABORTED")
+        raise
+
+    try:
+        local_patient_id = await adapter.resolve_local_patient(patient_id)
+        if local_patient_id is None or local_patient_id != link.source_local_patient_id:
+            await _settle(db, transaction, "ABORTED")
+            raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+        rows = await adapter.read_records(
+            patient_id, local_patient_id, domains, SOURCE_FETCH_LIMIT, 0
+        )
+    except SourceUnavailable:
+        await _settle(db, transaction, "ABORTED")
+        raise ApiError(503, "SOURCE_UNAVAILABLE", "The source system is unavailable.") from None
+    except SourceSchemaError:
+        await _settle(db, transaction, "ABORTED")
+        raise ApiError(
+            503, "SOURCE_SCHEMA_ERROR", "The source returned an unusable response."
+        ) from None
+
+    releasable = [row for row in rows if _visible(row, grant, policy, role, sensitive_access)]
+    page = releasable[offset : offset + limit]
     next_cursor = None
-    if len(rows) > limit:
+    if len(releasable) > offset + limit:
         next_cursor = encode_cursor(
             {
                 "actor": str(actor.user.id),
@@ -704,18 +1115,74 @@ async def read_remote_records(
                 "offset": offset + limit,
             }
         )
-    retrieved_at = _now()
-    db.add(
-        AuditEvent(
-            id=uuid4(),
-            actor_id=actor.user.id,
-            organization_id=recipient.id,
-            action="REMOTE_RECORDS_READ",
-            resource_type="consent_grant",
-            resource_id=grant.id,
-            metadata_json={"source_org_id": str(source_id), "domains": domains},
-            occurred_at=retrieved_at,
-        )
-    )
+
+    # Final authorization check immediately before release (PRD §7.3 step 7). A revocation,
+    # suspension, shift end or closed encounter that committed during the fetch wins. Commit
+    # first so the re-reads start a fresh snapshot, and refresh rows the request already holds.
     await db.commit()
-    return items, next_cursor, source, retrieved_at
+    await db.refresh(grant, with_for_update=True)
+    membership = await db.get(Membership, actor.membership.id)
+    if membership is not None:
+        await db.refresh(membership)
+    await db.refresh(encounter)
+    shift = await active_shift(db, actor.membership.id, fresh=True)
+    if grant.status == "REVOKED":
+        await _settle(db, transaction, "DENIED")
+        raise ApiError(403, "GRANT_REVOKED", "The consent grant has been revoked.")
+    if grant.status != "ACTIVE" or _expired(grant.expires_at):
+        await _settle(db, transaction, "DENIED")
+        raise ApiError(403, "GRANT_EXPIRED", "The consent grant is no longer active.")
+    if grant.version != transaction.grant_version:
+        await _settle(db, transaction, "DENIED")
+        raise ApiError(409, "VERSION_CONFLICT", "The consent grant changed during the read.")
+    if (
+        membership is None
+        or not membership.active
+        or membership.suspended
+        or shift is None
+        or encounter.status != "OPEN"
+    ):
+        await _settle(db, transaction, "DENIED")
+        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
+    organization = await db.get(Organization, membership.organization_id)
+    if organization is None or organization.status == "SUSPENDED":
+        await _settle(db, transaction, "DENIED")
+        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
+
+    retrieved_at = _now()
+    # PRD §10.3 step 6: source and recipient release authorizations are durable before the
+    # response is released; a missing receipt discards the payload.
+    released = _exchange_events(
+        actor,
+        grant,
+        transaction,
+        [
+            (
+                "DISCLOSURE_RELEASE_AUTHORIZED",
+                audit.hospital_stream(source_id),
+                source_id,
+                "CONSENT_ALLOWED",
+            ),
+            (
+                "ACCESS_RELEASE_AUTHORIZED",
+                audit.hospital_stream(recipient.id),
+                recipient.id,
+                "CONSENT_ALLOWED",
+            ),
+        ],
+        domains,
+        policy.version,
+        extra={"released_count": len(page)},
+        occurred_at=retrieved_at,
+    )
+    db.add_all(released)
+    await db.commit()
+    try:
+        await audit.require_ack(db, released)
+    except ApiError:
+        await _settle(db, transaction, "ABORTED")
+        raise
+    transaction.state = "RELEASED"
+    transaction.released_at = retrieved_at
+    await db.commit()
+    return [row.public() for row in page], next_cursor, source, retrieved_at
