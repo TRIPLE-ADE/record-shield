@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { ShieldCheckIcon, SquaresFourIcon, StackIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { WorkspaceHeader } from "@/features/auth/components/workspace-header";
-import { useSession } from "@/features/auth/use-session";
+import { useSession } from "@/hooks/auth";
 
 type WorkspaceShellProps = {
   children: ReactNode;

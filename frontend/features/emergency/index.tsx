@@ -2,13 +2,15 @@
 
 import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
-import type { ClinicalRecord } from "@/lib/api/contracts/records";
-import { useSession } from "@/features/auth/use-session";
-import { useDiscoverSources } from "@/features/exchange/api";
-import { useLocalRecords } from "@/features/patient-records/api";
-import { EmergencyWorkspace } from "./components";
+import { getPatientName } from "@/utils/clinical-records";
+import { useSession } from "@/hooks/auth";
+import { useDiscoverSources } from "@/hooks/exchange";
+import { useLocalRecords } from "@/hooks/patient-records";
+import { EmergencyDenied, EmergencyLoading, EmergencyWorkspace } from "./components";
+import { canActivateEmergency } from "@/utils/authorization";
+import type { EmergencyPageProps } from "./types";
 
-export default function EmergencyPage({ patientId }: { patientId: string }) {
+export default function EmergencyPage({ patientId }: EmergencyPageProps) {
   const session = useSession();
   const context = session.data;
   const records = useLocalRecords(patientId, "demographics", "treatment", {
@@ -28,11 +30,7 @@ export default function EmergencyPage({ patientId }: { patientId: string }) {
   if (!context || context.patient_id !== patientId || !context.organization) {
     return <EmergencyDenied description="The current session is not linked to this patient." />;
   }
-  if (
-    context.role !== "EMERGENCY_DOCTOR" ||
-    !context.permissions_summary.includes("emergency.activate_with_context") ||
-    !context.shift?.active
-  ) {
+  if (!canActivateEmergency(context)) {
     return <EmergencyDenied description="This work context cannot activate emergency access." />;
   }
 
@@ -49,37 +47,5 @@ export default function EmergencyPage({ patientId }: { patientId: string }) {
       sessionContext={authenticatedContext}
       sources={sources.data?.items ?? []}
     />
-  );
-}
-
-function getPatientName(record: ClinicalRecord | undefined) {
-  const payload = record?.payload;
-  return payload && "name" in payload ? payload.name : undefined;
-}
-
-function EmergencyLoading() {
-  return (
-    <main id="main-content" className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-10">
-      <div className="space-y-5">
-        <div className="h-8 w-64 animate-pulse rounded-lg bg-muted" />
-        <div className="h-32 animate-pulse rounded-2xl bg-muted" />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 8 }, (_, index) => (
-            <div key={index} className="h-32 animate-pulse rounded-xl bg-muted" />
-          ))}
-        </div>
-      </div>
-    </main>
-  );
-}
-
-function EmergencyDenied({ description }: { description: string }) {
-  return (
-    <main id="main-content" className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-10">
-      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <h1 className="font-heading text-xl font-semibold">Emergency access unavailable</h1>
-        <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
-      </div>
-    </main>
   );
 }

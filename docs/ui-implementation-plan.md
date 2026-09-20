@@ -1,6 +1,6 @@
 # RecordShield Frontend UI Implementation Plan
 
-Status: Gate 3 implemented; Gate 4 pending
+Status: Gate 4 implemented; Gate 5 pending
 
 This plan turns the RecordShield product and architecture specification into a frontend build sequence. It is deliberately written for the current Next.js app, which will use a contract-faithful mock API until the real services are available.
 
@@ -49,6 +49,7 @@ app/
   (workspace)/workspace/page.tsx        # re-export features/workspace
   (workspace)/workspace/patients/[id]/page.tsx
   (workspace)/workspace/patients/[id]/exchange/page.tsx
+  (workspace)/workspace/patients/[id]/emergency/page.tsx
   (portal)/portal/page.tsx               # re-export features/portal
   (security)/security/page.tsx          # re-export features/security
   (admin)/admin/page.tsx                # re-export features/admin
@@ -75,8 +76,11 @@ lib/
   api/
   mock-api/
   query/
-  formatters/
   security/
+
+utils/                                  # shared domain helpers and formatters
+
+hooks/                                  # global React Query hooks grouped by domain
 
 e2e/                                    # Playwright only
 ```
@@ -87,7 +91,9 @@ Each feature follows the same shape:
 features/<feature>/
   index.tsx                              # route-level composition
   components/
-  api.ts                                 # query and mutation functions
+  api/
+    index.ts                             # transport functions and response parsing
+    index.test.ts                        # API contract tests
   schemas.ts                             # Zod request/response schemas
   view-models.ts                         # server data to display model
   index.test.tsx                         # colocated Vitest Browser Mode tests
@@ -160,8 +166,8 @@ The real API base URL remains configurable through the Axios client. Switching f
 
 ```text
 feature component
-  -> React Query hook
-    -> feature api function
+  -> feature hook (React Query)
+    -> feature API function
       -> lib/api/client.ts
         -> /api/v1 (mock route now, real service later)
 ```
@@ -331,6 +337,11 @@ Quality gate:
 
 ### Gate 4 - Emergency progressive disclosure
 
+Status: implemented. Emergency activation, bounded summary reads, explicit Level 2 expansion,
+justification, expiry, patient notification metadata, and security-admin revocation are live through
+the contract-faithful mock transport. The clinician flow is
+`/workspace/patients/[id]/emergency`.
+
 Build:
 
 - Emergency activation control available only to server-approved eligible memberships.
@@ -467,7 +478,7 @@ Do not duplicate every assertion in every layer. Keep security invariants at the
 
 ### 8.3 Browser-mode test conventions
 
-- Tests live beside the feature: `features/<feature>/*.test.tsx`.
+- UI tests live beside the feature in `features/<feature>/index.test.tsx`; API contract tests live beside their implementation in `features/<feature>/api/index.test.ts`.
 - Use `render` from `vitest-browser-react`, locators from `vitest/browser`, and `expect.element` assertions.
 - Prefer role, label, and text locators that reflect the accessible UI.
 - Install a fresh mock store per test or reset through a test-only store fixture; do not depend on test order.

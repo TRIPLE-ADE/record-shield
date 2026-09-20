@@ -27,17 +27,43 @@ app/(portal)/portal/page.tsx          -> features/portal
 app/api/v1/[...path]/route.ts        -> demo HTTP transport only
 ```
 
-Feature folders own page composition, feature components, API functions, schemas/view models when needed, and colocated tests:
+Global server-state hooks live in `hooks/`, grouped by domain so every feature consumes the same
+query and mutation behavior:
+
+```text
+hooks/
+  auth.ts
+  patient-records.ts
+  exchange.ts
+  emergency.ts
+```
+
+Feature folders own page composition, feature components, API functions, schemas, data, helpers, and colocated tests:
 
 ```text
 features/<feature>/
-  index.tsx
-  components/
-  api.ts
-  schemas.ts
-  view-models.ts
+  index.tsx                 -> page composition only; no component implementations
+  components/               -> one component function per file, plus an export-only index.ts
+  api/
+    index.ts                -> feature transport functions only; parse contract responses here
+    index.test.ts           -> API contract and behavior tests
+  data/                     -> static UI metadata and development-only reference data
+  schemas.ts                -> feature input validation and inferred form types
+  types.ts                  -> feature prop and view-model types shared by components
+  utils/                    -> feature-specific formatters, guards, and pure helpers
   index.test.tsx
 ```
+
+Keep route-level decisions in `index.tsx` and keep React Query orchestration in the global `hooks/`, then pass
+the smallest necessary values into components. API modules own request and response functions;
+hooks own query keys, caching, invalidation, and mutations. Do not put JSX helpers, static data,
+schemas, or formatting functions in a feature index. Put genuinely cross-feature behavior in `lib/` or `components/`
+(`lib/api/`, `lib/query/`, `utils/`, and shared form feedback are examples); leave
+feature-specific behavior beside its feature. Shared domain helpers belong in `utils/`, while
+API transport helpers belong in `lib/api/`. Avoid barrel files that contain implementations: a
+feature `components/index.ts` may only re-export the individual component modules, and a feature
+`api/index.ts` owns the feature's transport seam. The global hooks are grouped by domain and should
+only depend on feature API functions for network work.
 
 Use `index.tsx` for feature pages. Do not create `features/<feature>/page.tsx`. The only separate test location is `e2e/`, which contains Playwright flows against the running application.
 
@@ -51,8 +77,8 @@ Keep the request path explicit:
 
 ```text
 feature component
-  -> React Query hook
-  -> feature api function
+  -> feature hook
+  -> feature API function
   -> lib/api/client.ts
   -> /api/v1 mock route now, real service later
 ```

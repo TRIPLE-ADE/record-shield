@@ -13,23 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useLogout, useSession } from "../use-session";
-
-function formatRole(role: string | null) {
-  if (!role) return "Patient";
-  return role
-    .split("_")
-    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function formatRemaining(milliseconds: number) {
-  if (milliseconds <= 0) return "Shift ended";
-  const totalMinutes = Math.floor(milliseconds / 60_000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return hours ? `${hours}h ${minutes.toString().padStart(2, "0")}m left` : `${minutes}m left`;
-}
+import { formatRemaining, formatRoleName } from "@/utils/formatters";
+import { useLogout, useSession } from "@/hooks/auth";
 
 export function WorkspaceHeader() {
   const router = useRouter();
@@ -91,7 +76,7 @@ export function WorkspaceHeader() {
                 weight="duotone"
               />
               <span className="max-w-32 truncate font-medium">{context.organization.name}</span>
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-widest text-muted-foreground">
                 {context.organization.mode === "LITE" ? "Lite" : "EMR"}
               </span>
             </div>
@@ -114,7 +99,7 @@ export function WorkspaceHeader() {
               {context?.user.username ?? "Context unavailable"}
             </span>
             <span className="hidden text-[0.65rem] text-muted-foreground xl:block">
-              {formatRole(context?.role ?? null)}
+              {formatRoleName(context?.role ?? null)}
             </span>
             <CaretDownIcon aria-hidden="true" className="size-3 text-muted-foreground" />
           </div>

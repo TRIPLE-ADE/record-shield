@@ -1516,6 +1516,7 @@ export class MockAuthService {
   private canIncludeEmergencyRecord(record: ClinicalRecord, sourceOrganizationId: string) {
     return (
       record.sensitivity !== "RESTRICTED" &&
+      record.restricted_tags.length === 0 &&
       this.canExpandEmergencyDomain(record.domain as EmergencyDomain, sourceOrganizationId)
     );
   }
@@ -1527,7 +1528,8 @@ export class MockAuthService {
       (record) =>
         record.patient_id === emergency.patient_id &&
         record.source.organization_id === emergency.source_org_id &&
-        record.sensitivity !== "RESTRICTED",
+        record.sensitivity !== "RESTRICTED" &&
+        record.restricted_tags.length === 0,
     );
     const demographics = sourceRecords.find((record) => record.domain === "demographics");
     const demographicsPayload = demographics?.payload;

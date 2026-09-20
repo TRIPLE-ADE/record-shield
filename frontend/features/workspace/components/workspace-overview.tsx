@@ -1,63 +1,21 @@
 "use client";
 
-import type { ReactNode } from "react";
-import Link from "next/link";
 import {
   ArrowClockwiseIcon,
-  ArrowRightIcon,
   CheckCircleIcon,
   ClockCountdownIcon,
   DatabaseIcon,
   LockKeyIcon,
   PulseIcon,
   ShieldCheckIcon,
-  WarningCircleIcon,
 } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { SessionContext } from "@/lib/api/contracts/auth";
-
-type WorkspaceUnavailableProps = {
-  isContextDenied: boolean;
-  onReturn: () => void;
-};
-
-export function WorkspaceUnavailable({ isContextDenied, onReturn }: WorkspaceUnavailableProps) {
-  return (
-    <main id="main-content" className="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-10">
-      <Card className="mx-auto max-w-xl border-warning/35 bg-warning/5">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <WarningCircleIcon
-              aria-hidden="true"
-              className="size-5 text-warning"
-              weight="duotone"
-            />
-            {isContextDenied ? "Context needs review" : "Workspace unavailable"}
-          </CardTitle>
-          <CardDescription>
-            {isContextDenied
-              ? "Your signed-in identity is known, but its current membership context is no longer active. No protected data was loaded."
-              : "The current session could not be verified. No protected data was loaded."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button onClick={onReturn}>
-            Return to sign in
-            <ArrowRightIcon aria-hidden="true" />
-          </Button>
-        </CardContent>
-      </Card>
-    </main>
-  );
-}
-
-type WorkspaceOverviewProps = {
-  context: SessionContext;
-  isFetching: boolean;
-  onRefresh: () => void;
-};
+import { formatRole, formatTime, humanizePermission } from "../utils/format";
+import type { WorkspaceOverviewProps } from "../types";
+import { ContextItem } from "./context-item";
+import { NextStepCard } from "./next-step-card";
 
 export function WorkspaceOverview({ context, isFetching, onRefresh }: WorkspaceOverviewProps) {
   const firstName = context.user.username.split(".")[0];
@@ -189,89 +147,5 @@ export function WorkspaceOverview({ context, isFetching, onRefresh }: WorkspaceO
         />
       </section>
     </main>
-  );
-}
-
-function formatRole(role: string | null) {
-  if (!role) return "Patient";
-  return role
-    .split("_")
-    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function humanizePermission(permission: string) {
-  return permission
-    .split(".")
-    .at(-1)
-    ?.replaceAll("_", " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-const timeFormatter = new Intl.DateTimeFormat("en", {
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "UTC",
-});
-
-function formatTime(value: string) {
-  return timeFormatter.format(new Date(value));
-}
-
-function ContextItem({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="text-sm font-medium">{value}</p>
-      <p className="text-xs text-muted-foreground">{detail}</p>
-    </div>
-  );
-}
-
-function NextStepCard({
-  icon,
-  eyebrow,
-  title,
-  copy,
-  href,
-}: {
-  icon: ReactNode;
-  eyebrow: string;
-  title: string;
-  copy: string;
-  href?: string;
-}) {
-  const content = (
-    <CardContent className="p-5">
-      <span className="grid size-9 place-items-center rounded-lg bg-muted text-primary [&_svg]:size-4">
-        {icon}
-      </span>
-      <p className="mt-5 text-[0.65rem] font-semibold uppercase tracking-[0.16em] text-primary">
-        {eyebrow}
-      </p>
-      <h2 className="mt-2 font-heading text-base font-medium">{title}</h2>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">{copy}</p>
-      {href ? (
-        <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-primary">
-          Open current encounter
-          <ArrowRightIcon aria-hidden="true" className="size-4" />
-        </span>
-      ) : null}
-    </CardContent>
-  );
-
-  return href ? (
-    <Link
-      href={href}
-      className="block rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-    >
-      <Card className="h-full bg-card/70 transition-colors hover:border-primary/35 hover:bg-card">
-        {content}
-      </Card>
-    </Link>
-  ) : (
-    <Card className="bg-card/70">{content}</Card>
   );
 }

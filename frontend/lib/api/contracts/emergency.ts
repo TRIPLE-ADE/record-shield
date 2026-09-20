@@ -44,7 +44,10 @@ export const emergencySessionSchema = z.strictObject({
   reason_code: emergencyReasonCodeSchema,
   status: z.enum(["ACTIVE_SUMMARY", "ACTIVE_EXPANDED", "EXPIRED", "REVOKED"]),
   level: z.number().int().min(1).max(2),
-  expanded_domains: z.array(emergencyDomainSchema).max(11),
+  expanded_domains: z
+    .array(emergencyDomainSchema)
+    .max(11)
+    .refine((domains) => new Set(domains).size === domains.length, "Domains must be unique."),
   started_at: utcDateTime,
   expires_at: utcDateTime,
   justification_due_at: utcDateTime,
@@ -120,7 +123,11 @@ export const emergencyStatusResponseSchema = z.strictObject({
 });
 
 export const emergencyExpansionSchema = z.strictObject({
-  domains: z.array(emergencyDomainSchema).min(1).max(11),
+  domains: z
+    .array(emergencyDomainSchema)
+    .min(1)
+    .max(11)
+    .refine((domains) => new Set(domains).size === domains.length, "Domains must be unique."),
   narrative: z.string().trim().min(20).max(1000),
   expected_version: z.number().int().min(1),
 });

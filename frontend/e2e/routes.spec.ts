@@ -138,7 +138,12 @@ test("design system is development-only", async ({ page }) => {
 });
 
 test("restricted disclosure requires a necessity narrative", async ({ page }) => {
-  await page.goto("/design-system");
+  const response = await page.goto("/design-system");
+
+  if (process.env.CI) {
+    expect(response?.status()).toBe(404);
+    return;
+  }
 
   await page.locator('[data-slot="button"]').filter({ hasText: "Request specific domain" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();

@@ -4,9 +4,15 @@ import { redirect } from "next/navigation";
 import { useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import type { SessionContext } from "@/lib/api/contracts/auth";
-import type { ClinicalRecord, Domain } from "@/lib/api/contracts/records";
-import { useSession } from "@/features/auth/use-session";
-import { useLocalRecords, type RecordPurpose } from "./api";
+import type { Domain } from "@/lib/api/contracts/records";
+import {
+  canActivateEmergency,
+  canWriteLocalDomain,
+  isTreatingPractitioner,
+} from "@/utils/authorization";
+import { getPatientSummary } from "@/utils/clinical-records";
+import { useSession } from "@/hooks/auth";
+import { useLocalRecords, type RecordPurpose } from "@/hooks/patient-records";
 import {
   PatientOverview,
   PatientRecordsLoading,
@@ -14,8 +20,9 @@ import {
   RecordDomainNavigation,
   RecordPanel,
 } from "./components";
+import type { PatientRecordsPageProps } from "./types";
 
-export default function PatientRecordsPage({ patientId }: { patientId: string }) {
+export default function PatientRecordsPage({ patientId }: PatientRecordsPageProps) {
   const session = useSession();
   const [selectedDomain, setSelectedDomain] = useState<Domain>("demographics");
   const context = session.data;
@@ -25,10 +32,10 @@ export default function PatientRecordsPage({ patientId }: { patientId: string })
   const overview = useLocalRecords(patientId, "demographics", purpose, { enabled: queryEnabled });
   const selected = useLocalRecords(patientId, selectedDomain, purpose, { enabled: queryEnabled });
   const patientRecord = overview.data?.items.find((record) => record.domain === "demographics");
-  const patient = getPatientPayload(patientRecord);
+  const patient = getPatientSummary(patientRecord);
   const localPatientId = patientRecord?.source.local_patient_id;
   const encounterId = overview.data?.items[0]?.encounter_id;
-  const canWrite = canWriteDomain(context, selectedDomain);
+  const canWrite = canWriteLocalDomain(context, selectedDomain);
   const source = selected.data?.source ?? overview.data?.source;
 
   if (session.isPending) return <PatientRecordsLoading />;
@@ -60,7 +67,7 @@ export default function PatientRecordsPage({ patientId }: { patientId: string })
         context={authenticatedContext}
         sourceName={source?.name}
         sourceMode={source?.mode}
-        canExchange={isExchangePractitioner(context.role)}
+        canExchange={isTreatingPractitioner(context.role)}
         canEmergency={canActivateEmergency(context)}
       />
       <section className="mt-7 grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
@@ -75,34 +82,4 @@ export default function PatientRecordsPage({ patientId }: { patientId: string })
       </section>
     </main>
   );
-}
-
-function canWriteDomain(context: SessionContext | undefined, domain: Domain) {
-  return Boolean(
-    context?.organization?.mode === "LITE" &&
-    context.permissions_summary.includes("local_records.write") &&
-    ["vitals", "nursing_notes"].includes(domain),
-  );
-}
-
-function isExchangePractitioner(role: string | null) {
-  return ["ATTENDING_DOCTOR", "VISITING_DOCTOR", "EMERGENCY_DOCTOR", "NURSE_MIDWIFE"].includes(
-    role ?? "",
-  );
-}
-
-function canActivateEmergency(context: SessionContext) {
-  return Boolean(
-    context.role === "EMERGENCY_DOCTOR" &&
-    context.permissions_summary.includes("emergency.activate_with_context") &&
-    context.shift?.active,
-  );
-}
-
-function getPatientPayload(record: ClinicalRecord | undefined) {
-  const payload = record?.payload;
-  if (!payload || !("name" in payload) || !("date_of_birth" in payload) || !("gender" in payload)) {
-    return undefined;
-  }
-  return payload as { name: string; date_of_birth: string; gender: string };
 }

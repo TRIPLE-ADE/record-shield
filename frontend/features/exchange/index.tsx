@@ -2,12 +2,14 @@
 
 import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
-import type { ClinicalRecord } from "@/lib/api/contracts/records";
-import { useSession } from "@/features/auth/use-session";
-import { useLocalRecords } from "@/features/patient-records/api";
+import { getPatientName } from "@/utils/clinical-records";
+import { isTreatingPractitioner } from "@/utils/authorization";
+import { useSession } from "@/hooks/auth";
+import { useLocalRecords } from "@/hooks/patient-records";
 import { ExchangeLoading, ExchangeState, ExchangeWorkspace } from "./components";
+import type { ExchangePageProps } from "./types";
 
-export default function ExchangePage({ patientId }: { patientId: string }) {
+export default function ExchangePage({ patientId }: ExchangePageProps) {
   const session = useSession();
   const context = session.data;
   const localRecords = useLocalRecords(patientId, "demographics", "treatment", {
@@ -27,7 +29,7 @@ export default function ExchangePage({ patientId }: { patientId: string }) {
       />
     );
   }
-  if (!isExchangePractitioner(context.role)) {
+  if (!isTreatingPractitioner(context.role)) {
     return (
       <ExchangeState
         kind="denied"
@@ -45,15 +47,4 @@ export default function ExchangePage({ patientId }: { patientId: string }) {
       receivingEncounterId={receivingEncounterId}
     />
   );
-}
-
-function isExchangePractitioner(role: string | null) {
-  return ["ATTENDING_DOCTOR", "VISITING_DOCTOR", "EMERGENCY_DOCTOR", "NURSE_MIDWIFE"].includes(
-    role ?? "",
-  );
-}
-
-function getPatientName(record: ClinicalRecord | undefined) {
-  const payload = record?.payload;
-  return payload && "name" in payload ? payload.name : undefined;
 }

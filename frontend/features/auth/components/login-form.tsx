@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRightIcon,
   BuildingsIcon,
@@ -17,24 +16,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { login } from "../api";
 import { demoIdentities, DEMO_PASSWORD, type DemoIdentity } from "../demo-identities";
+import { useLogin } from "@/hooks/auth";
+import { formatIdentityRole } from "../utils/format";
 import { loginRequestSchema, type LoginRequest } from "@/lib/api/contracts/auth";
-import { sessionQueryKey } from "../use-session";
 
 const isMockMode = !process.env.NEXT_PUBLIC_API_URL;
 
-function formatRole(role: DemoIdentity["role"]) {
-  if (role === "PATIENT") return "Patient portal";
-  return role
-    .split("_")
-    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
-    .join(" ");
-}
-
 export function LoginForm() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const [selectedUsername, setSelectedUsername] = useState<string>(demoIdentities[0].username);
   const form = useForm<LoginRequest>({
     resolver: zodResolver(loginRequestSchema),
@@ -43,14 +33,7 @@ export function LoginForm() {
       password: isMockMode ? DEMO_PASSWORD : "",
     },
   });
-  const loginMutation = useMutation({
-    mutationFn: login,
-    onSuccess: (session) => {
-      queryClient.setQueryData(sessionQueryKey, session);
-      router.push("/workspace");
-      router.refresh();
-    },
-  });
+  const loginMutation = useLogin();
 
   const handleSelect = (identity: DemoIdentity) => {
     setSelectedUsername(identity.username);
@@ -60,7 +43,12 @@ export function LoginForm() {
   };
 
   const onSubmit = form.handleSubmit((values) => {
-    loginMutation.mutate(values);
+    loginMutation.mutate(values, {
+      onSuccess: () => {
+        router.push("/workspace");
+        router.refresh();
+      },
+    });
   });
   const serverMessage = loginMutation.error?.message;
 
@@ -183,7 +171,7 @@ export function LoginForm() {
                     </span>
                   </span>
                   <span className="mt-1 text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground/75">
-                    {formatRole(identity.role)}
+                    {formatIdentityRole(identity.role)}
                   </span>
                 </button>
               );
