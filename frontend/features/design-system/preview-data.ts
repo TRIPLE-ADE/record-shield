@@ -51,7 +51,8 @@ export const previewStates: PreviewState[] = [
     kind: "denied",
     label: "Denied",
     title: "This scope is not available",
-    description: "The current role does not permit this domain. No clinical payload was returned.",
+    description:
+      "The current role does not permit this domain. The request was blocked before disclosure.",
   },
   {
     kind: "unavailable",

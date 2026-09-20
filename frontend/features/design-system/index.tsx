@@ -175,10 +175,10 @@ function DesignSystemContent() {
                 <ArrowsClockwiseIcon aria-hidden="true" /> Reset preview
               </Button>
               <Link
-                href="/"
+                href="/login"
                 className="inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                Return home <ArrowUpRightIcon aria-hidden="true" className="size-3.5" />
+                Back to sign in <ArrowUpRightIcon aria-hidden="true" className="size-3.5" />
               </Link>
             </div>
             <p aria-live="polite" className="text-xs text-muted-foreground">

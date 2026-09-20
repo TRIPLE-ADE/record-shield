@@ -3,7 +3,9 @@ import { mockAuthService, type MockRequest } from "@/lib/mock-api/auth-service";
 
 async function handle(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
-  const method = request.method === "GET" || request.method === "POST" ? request.method : undefined;
+  const method = ["GET", "POST", "PATCH"].includes(request.method)
+    ? (request.method as "GET" | "POST" | "PATCH")
+    : undefined;
 
   if (!method) {
     return NextResponse.json(
@@ -14,11 +16,17 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
         },
         correlation_id: crypto.randomUUID(),
       },
-      { status: 405, headers: { Allow: "GET, POST", "Cache-Control": "no-store" } },
+      { status: 405, headers: { Allow: "GET, POST, PATCH", "Cache-Control": "no-store" } },
     );
   }
 
-  const body = method === "POST" ? await request.json().catch(() => undefined) : undefined;
+  const body = method === "GET" ? undefined : await request.json().catch(() => undefined);
+  const query = Object.fromEntries(
+    [...new Set(request.nextUrl.searchParams.keys())].map((key) => {
+      const values = request.nextUrl.searchParams.getAll(key);
+      return [key, values.length > 1 ? values : values[0]];
+    }),
+  );
   const mockRequest: MockRequest = {
     method,
     path: `/${path.join("/")}`,
@@ -27,6 +35,7 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
     cookies: Object.fromEntries(
       request.cookies.getAll().map((cookie) => [cookie.name, cookie.value]),
     ),
+    query,
   };
   const result = mockAuthService.handle(mockRequest);
   const response = new NextResponse(
@@ -57,3 +66,4 @@ async function handle(request: NextRequest, context: { params: Promise<{ path: s
 
 export const GET = handle;
 export const POST = handle;
+export const PATCH = handle;

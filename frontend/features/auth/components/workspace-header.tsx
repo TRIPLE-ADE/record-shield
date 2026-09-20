@@ -92,7 +92,7 @@ export function WorkspaceHeader() {
               />
               <span className="max-w-32 truncate font-medium">{context.organization.name}</span>
               <span className="rounded-full bg-muted px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
-                {context.organization.mode === "LITE" ? "Lite" : "Mock EMR"}
+                {context.organization.mode === "LITE" ? "Lite" : "EMR"}
               </span>
             </div>
           ) : null}

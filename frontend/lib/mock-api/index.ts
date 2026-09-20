@@ -48,11 +48,12 @@ export function installMockApi(): MockApiRuntime {
 
   adapter.onAny().reply((config) => {
     const result = service.handle({
-      method: (config.method?.toUpperCase() ?? "GET") as "GET" | "POST",
+      method: (config.method?.toUpperCase() ?? "GET") as "GET" | "POST" | "PATCH",
       path: config.url ?? "/",
       body: bodyFromConfig(config.data),
       headers: headersToRecord(config.headers),
       cookies: cookieJar,
+      query: config.params as Record<string, string | string[] | undefined> | undefined,
     });
     applyCookies(cookieJar, result.cookies);
     return [result.status, result.body, result.headers];

@@ -17,8 +17,8 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
-    "doctor": "npx react-doctor@latest"
+    "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm doctor",
+    "doctor": "npx react-doctor@latest --verbose"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

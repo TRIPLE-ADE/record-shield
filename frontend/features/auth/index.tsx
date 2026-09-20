@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowUpRightIcon, LockKeyIcon, ShieldCheckIcon, SparkleIcon } from "@phosphor-icons/react";
+import { LockKeyIcon, ShieldCheckIcon, SparkleIcon } from "@phosphor-icons/react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoginForm } from "./components/login-form";
 
@@ -13,7 +12,11 @@ export default function LoginPage() {
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-5 py-5 sm:px-8 lg:px-12">
         <header className="flex items-center justify-between gap-4">
-          <Link href="/" className="inline-flex items-center gap-3" aria-label="RecordShield home">
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-3"
+            aria-label="RecordShield sign in"
+          >
             <span className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground shadow-sm">
               <ShieldCheckIcon aria-hidden="true" className="size-5" weight="duotone" />
             </span>
@@ -27,12 +30,6 @@ export default function LoginPage() {
             </span>
           </Link>
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-              <Link href="/design-system">
-                Design system
-                <ArrowUpRightIcon aria-hidden="true" />
-              </Link>
-            </Button>
             <ThemeToggle />
           </div>
         </header>
@@ -55,7 +52,7 @@ export default function LoginPage() {
               <TrustNote
                 icon={<LockKeyIcon aria-hidden="true" />}
                 title="Named access"
-                copy="Every synthetic action starts with an attributable account."
+                copy="Every sign-in starts with an attributable account."
               />
               <TrustNote
                 icon={<ShieldCheckIcon aria-hidden="true" />}
@@ -64,18 +61,16 @@ export default function LoginPage() {
               />
               <TrustNote
                 icon={<SparkleIcon aria-hidden="true" />}
-                title="Demo-safe"
-                copy="All identities and records are synthetic and visibly labeled."
+                title="Clear boundaries"
+                copy="The workspace reflects the context returned for this session."
               />
             </div>
           </section>
 
           <Card className="border-border/75 bg-card/90 shadow-xl shadow-primary/6 backdrop-blur-sm">
             <CardHeader className="border-b border-border/65 px-6 py-6 sm:px-7">
-              <CardTitle className="text-xl">Sign in to a synthetic account</CardTitle>
-              <CardDescription>
-                Choose an identity below or enter its username. The demo password is prefilled.
-              </CardDescription>
+              <CardTitle className="text-xl">Sign in to your account</CardTitle>
+              <CardDescription>Enter your username and password to continue.</CardDescription>
             </CardHeader>
             <CardContent className="px-6 py-6 sm:px-7">
               <LoginForm />
@@ -84,7 +79,7 @@ export default function LoginPage() {
         </div>
 
         <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-5 text-xs text-muted-foreground">
-          <span>Protected workspace · no live patient data</span>
+          <span>Protected workspace · server-derived access</span>
           <span className="font-mono">/login</span>
         </footer>
       </div>

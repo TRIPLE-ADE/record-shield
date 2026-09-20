@@ -36,7 +36,4 @@ test("renders workspace context from the authenticated session", async () => {
     .toBeVisible();
   await expect.element(page.getByText("Unity Medical")).toBeVisible();
   await expect.element(page.getByText("Emergency Doctor")).toBeVisible();
-  await expect
-    .element(page.getByText("No clinical payload has been requested on this page."))
-    .toBeVisible();
 });

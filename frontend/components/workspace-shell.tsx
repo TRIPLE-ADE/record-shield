@@ -2,28 +2,33 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import {
-  ArrowUpRightIcon,
-  HouseIcon,
-  LifebuoyIcon,
-  ShieldCheckIcon,
-  SquaresFourIcon,
-  StackIcon,
-} from "@phosphor-icons/react";
+import { usePathname } from "next/navigation";
+import { ShieldCheckIcon, SquaresFourIcon, StackIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { WorkspaceHeader } from "@/features/auth/components/workspace-header";
+import { useSession } from "@/features/auth/use-session";
 
 type WorkspaceShellProps = {
   children: ReactNode;
 };
 
-const navigation = [
-  { label: "Overview", href: "/workspace", icon: SquaresFourIcon },
-  { label: "Patient records", href: "#records", icon: StackIcon, disabled: true },
-  { label: "Security evidence", href: "#security", icon: ShieldCheckIcon, disabled: true },
-];
-
 export function WorkspaceShell({ children }: WorkspaceShellProps) {
+  const pathname = usePathname();
+  const session = useSession();
+  const patientRecordsHref = session.data?.patient_id
+    ? `/workspace/patients/${session.data.patient_id}`
+    : undefined;
+  const navigation = [
+    { label: "Overview", href: "/workspace", icon: SquaresFourIcon, disabled: false },
+    {
+      label: "Patient records",
+      href: patientRecordsHref,
+      icon: StackIcon,
+      disabled: !patientRecordsHref,
+    },
+    { label: "Security evidence", href: undefined, icon: ShieldCheckIcon, disabled: true },
+  ];
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <a
@@ -56,14 +61,19 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
               Workspace
             </p>
             <nav aria-label="Workspace navigation" className="space-y-1">
-              {navigation.map((item, index) => {
+              {navigation.map((item) => {
                 const Icon = item.icon;
+                const isActive = Boolean(
+                  item.href &&
+                  (pathname === item.href ||
+                    (item.label === "Patient records" && pathname.startsWith(item.href))),
+                );
                 const content = (
                   <>
                     <Icon
                       aria-hidden="true"
                       className="size-4"
-                      weight={index === 0 ? "duotone" : "regular"}
+                      weight={isActive ? "duotone" : "regular"}
                     />
                     <span>{item.label}</span>
                     {item.disabled ? (
@@ -74,7 +84,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                   </>
                 );
 
-                return item.disabled ? (
+                return item.disabled || !item.href ? (
                   <span
                     key={item.label}
                     className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/40"
@@ -88,7 +98,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                     href={item.href}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-                      index === 0
+                      isActive
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-sidebar-foreground/70",
                     )}
@@ -99,43 +109,10 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
               })}
             </nav>
           </div>
-
-          <div className="mt-auto space-y-3 p-4">
-            <Link
-              href="/design-system"
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-xs text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              <LifebuoyIcon aria-hidden="true" className="size-3.5" />
-              Component reference
-              <ArrowUpRightIcon aria-hidden="true" className="ml-auto size-3.5" />
-            </Link>
-            <div className="rounded-xl border border-sidebar-border bg-sidebar-accent/60 p-3">
-              <div className="flex items-center gap-2 text-xs font-medium">
-                <span className="size-2 rounded-full bg-sidebar-primary" />
-                Synthetic environment
-              </div>
-              <p className="mt-2 text-xs leading-5 text-sidebar-foreground/55">
-                Context-backed preview · no live patient data
-              </p>
-            </div>
-          </div>
         </aside>
 
         <div className="min-w-0 flex-1">
           <WorkspaceHeader />
-          <div className="border-b border-border/60 bg-primary/4.5 px-4 py-2.5 sm:px-6 lg:px-10">
-            <div className="mx-auto flex max-w-7xl items-center gap-2 text-xs text-muted-foreground">
-              <HouseIcon
-                aria-hidden="true"
-                className="size-3.5 shrink-0 text-primary"
-                weight="duotone"
-              />
-              <span>
-                <span className="font-semibold text-foreground">Synthetic workspace</span> ·
-                server-derived context
-              </span>
-            </div>
-          </div>
           {children}
         </div>
       </div>

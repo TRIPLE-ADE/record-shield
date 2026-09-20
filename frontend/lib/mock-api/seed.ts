@@ -1,4 +1,5 @@
 import type { Role, Source } from "@/lib/api/contracts/auth";
+import { DEMO_PATIENT_ID } from "./records";
 
 export const DEMO_PASSWORD = "synthetic-example-password";
 
@@ -44,7 +45,7 @@ export const mockIdentities: MockIdentity[] = [
     membershipId: "00000000-0000-4000-8000-000000000005",
     role: "EMERGENCY_DOCTOR",
     organization: unityMedical,
-    patientId: null,
+    patientId: DEMO_PATIENT_ID,
     shiftId: sharedShift("00000000-0000-4000-8000-000000000017"),
     permissions: [
       "local_records.read_with_context",
@@ -64,7 +65,7 @@ export const mockIdentities: MockIdentity[] = [
     membershipId: "00000000-0000-4000-8000-000000000007",
     role: "NURSE_MIDWIFE",
     organization: unityMedical,
-    patientId: null,
+    patientId: DEMO_PATIENT_ID,
     shiftId: sharedShift("00000000-0000-4000-8000-000000000018"),
     permissions: ["local_records.read_with_context", "local_records.write"],
     active: true,
@@ -80,7 +81,7 @@ export const mockIdentities: MockIdentity[] = [
     membershipId: "00000000-0000-4000-8000-000000000009",
     role: "ATTENDING_DOCTOR",
     organization: mercyGeneral,
-    patientId: null,
+    patientId: DEMO_PATIENT_ID,
     shiftId: sharedShift("00000000-0000-4000-8000-000000000019"),
     permissions: ["local_records.read_with_context", "consent.request"],
     active: true,
@@ -96,7 +97,7 @@ export const mockIdentities: MockIdentity[] = [
     membershipId: "00000000-0000-4000-8000-000000000011",
     role: "CLERK_HEALTH_ATTENDANT",
     organization: mercyGeneral,
-    patientId: null,
+    patientId: DEMO_PATIENT_ID,
     shiftId: sharedShift("00000000-0000-4000-8000-000000000020"),
     permissions: ["local_records.read_with_context"],
     active: true,
@@ -112,7 +113,7 @@ export const mockIdentities: MockIdentity[] = [
     membershipId: "00000000-0000-4000-8000-000000000013",
     role: "SECURITY_ADMIN",
     organization: unityMedical,
-    patientId: null,
+    patientId: DEMO_PATIENT_ID,
     shiftId: sharedShift("00000000-0000-4000-8000-000000000021"),
     permissions: ["security.events.read", "security.alerts.review"],
     active: true,
@@ -128,7 +129,7 @@ export const mockIdentities: MockIdentity[] = [
     membershipId: null,
     role: null,
     organization: null,
-    patientId: "00000000-0000-4000-8000-000000000001",
+    patientId: DEMO_PATIENT_ID,
     shiftId: null,
     permissions: [],
     active: true,

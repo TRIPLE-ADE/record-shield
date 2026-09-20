@@ -13,7 +13,7 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 
-test("offers named synthetic identities without implying client-side authority", async () => {
+test("offers configured identities without implying client-side authority", async () => {
   render(
     <QueryProvider>
       <LoginPage />
@@ -30,6 +30,6 @@ test("offers named synthetic identities without implying client-side authority",
   await userEvent.click(page.getByRole("button", { name: /Kunle Adeyemi/ }));
   await expect.element(page.getByRole("textbox", { name: "Username" })).toHaveValue("kunle.mercy");
   await expect
-    .element(page.getByText("The selected card never grants a role or hospital."))
+    .element(page.getByText(/The selected card never grants a role or hospital/))
     .toBeVisible();
 });

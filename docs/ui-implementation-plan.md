@@ -1,6 +1,6 @@
 # RecordShield Frontend UI Implementation Plan
 
-Status: ready for implementation
+Status: Gate 1 implemented; Gate 2 pending
 
 This plan turns the RecordShield product and architecture specification into a frontend build sequence. It is deliberately written for the current Next.js app, which will use a contract-faithful mock API until the real services are available.
 
@@ -95,6 +95,8 @@ features/<feature>/
 
 `components/ui` stays limited to generated or lightly customized shadcn primitives. Product-specific pieces belong in the owning feature so their behavior and tests stay together.
 
+The design-system route is one self-contained reference page. It does not depend on an app shell, a route layout, or an API response. Protected workspace chrome is owned by the workspace route group.
+
 While the design-system review is in progress, `app/page.tsx` renders the small home placeholder from `features/home/index.tsx`. The visual preview at `/design-system` is static by design and does not require an API contract or mock response.
 
 ## 4. Gate 0: design system before product features
@@ -117,7 +119,6 @@ Do not encode product meaning through color alone. Every state also gets readabl
 
 Use the installed shadcn primitives to create and test these shared compositions:
 
-- `AppShell` - responsive navigation, hospital identity, signed-in user, synthetic-data banner, and session actions;
 - `WorkspaceHeader` - hospital mode, role, ward, shift countdown/status, and context refresh state;
 - `PageHeader` - title, purpose, breadcrumbs, and primary action slot;
 - `StatusBadge` - authorization, grant, emergency, alert, and integrity states;
@@ -244,6 +245,8 @@ The store also exposes test-only clock advancement, source disconnect, audit out
 ## 6. Feature implementation sequence
 
 ### Gate 1 - Authentication and context
+
+Status: implemented in the current frontend; the routes and mock transport below are live and covered by colocated browser tests plus Playwright flows.
 
 Build:
 

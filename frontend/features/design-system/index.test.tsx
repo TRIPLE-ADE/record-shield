@@ -12,14 +12,14 @@ test("communicates the design system purpose and trusted context", async () => {
   await expect.element(page.getByRole("link", { name: "Review components" })).toBeVisible();
 });
 
-test("shows failure states without exposing clinical content", async () => {
+test("shows a blocked state without exposing protected content", async () => {
   render(<DesignSystemPage />);
 
   await userEvent.click(page.getByRole("button", { name: "Denied" }));
 
   await expect.element(page.getByText("This scope is not available")).toBeVisible();
   await expect
-    .element(page.getByText("No clinical payload was returned.", { exact: false }))
+    .element(page.getByText("The request was blocked before disclosure.", { exact: false }))
     .toBeVisible();
 });
 
