@@ -1,0 +1,16 @@
+name: recordshield
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: recordshield
+      POSTGRES_PASSWORD: recordshield
+      POSTGRES_DB: recordshield
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
