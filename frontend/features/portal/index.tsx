@@ -42,6 +42,12 @@ import {
   useRevokeGrant,
 } from "@/features/exchange/api";
 
+const dateFormatter = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
+
 export default function PortalPage() {
   const router = useRouter();
   const session = useSession();
@@ -237,6 +243,7 @@ function ApprovalCard({ request }: { request: ConsentRequest }) {
   });
   const selectedDomains = useWatch({ control: form.control, name: "selected_domains" }) ?? [];
   const duration = useWatch({ control: form.control, name: "duration" }) ?? "PT24H";
+  const selectedDomainSet = new Set(selectedDomains);
 
   const submit = form.handleSubmit((values) => {
     approve.mutate(
@@ -271,7 +278,7 @@ function ApprovalCard({ request }: { request: ConsentRequest }) {
         </p>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {request.requested_domains.map((domain) => {
-            const checked = selectedDomains.includes(domain);
+            const checked = selectedDomainSet.has(domain);
             return (
               <label
                 key={domain}
@@ -436,9 +443,7 @@ function formatDomain(value: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(value),
-  );
+  return dateFormatter.format(new Date(value));
 }
 
 function errorMessage(error: unknown) {

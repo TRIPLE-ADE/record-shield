@@ -15,7 +15,7 @@ The login and workspace slice uses the documented `/api/v1` contract end to end.
 
 ## Project conventions
 
-- `next.config.ts` redirects the root path to sign in. Other route files stay thin and compose the feature pages from `app/design-system/page.tsx`, `app/(auth)/login/page.tsx`, and `app/(workspace)/workspace/page.tsx`.
+- `next.config.ts` redirects the root path to sign in. Other route files stay thin and compose feature pages from the design-system, auth, workspace, patient-records, exchange, emergency, and portal modules.
 - Feature pages and their colocated browser tests live in `features/*/index.tsx` and `features/*/index.test.tsx`.
 - `e2e/` contains Playwright flows that exercise the running application.
 - The design-system route is a self-contained development-only reference page; protected workspace chrome lives under the workspace route group.

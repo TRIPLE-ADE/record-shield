@@ -20,6 +20,10 @@ next.config.ts                       -> redirect / to /login
 app/design-system/page.tsx           -> features/design-system
 app/(auth)/login/page.tsx            -> features/auth
 app/(workspace)/workspace/page.tsx   -> features/workspace
+app/(workspace)/workspace/patients/[id]/page.tsx -> features/patient-records
+app/(workspace)/workspace/patients/[id]/exchange/page.tsx -> features/exchange
+app/(workspace)/workspace/patients/[id]/emergency/page.tsx -> features/emergency
+app/(portal)/portal/page.tsx          -> features/portal
 app/api/v1/[...path]/route.ts        -> demo HTTP transport only
 ```
 

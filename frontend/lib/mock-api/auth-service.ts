@@ -41,6 +41,24 @@ import {
   type RecordCorrection,
   type RecordCreate,
 } from "@/lib/api/contracts/records";
+import {
+  emergencyActivateSchema,
+  emergencyActivationResponseSchema,
+  emergencyDomainSchema,
+  emergencyExpansionSchema,
+  emergencyJustificationCreateSchema,
+  emergencyJustificationResponseSchema,
+  emergencyJustificationSchema,
+  emergencyRecordsResponseSchema,
+  emergencyRevokeSchema,
+  emergencySessionResponseSchema,
+  emergencySessionSchema,
+  emergencyStatusResponseSchema,
+  emergencySummarySchema,
+  type EmergencyDomain,
+  type EmergencySession,
+  type EmergencySummary,
+} from "@/lib/api/contracts/emergency";
 import { findMockIdentity, mockIdentities, type MockIdentity } from "./seed";
 import {
   createSeedRecords,
@@ -102,6 +120,8 @@ type StoredMutation = {
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1000;
 const PRE_AUTH_TIMEOUT_MS = 30 * 60 * 1000;
+const EMERGENCY_SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+const EMERGENCY_JUSTIFICATION_WINDOW_MS = 5 * 60 * 1000;
 function createId() {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -213,6 +233,14 @@ export class MockAuthService {
   private consentGrants: ConsentGrant[] = [];
   private accessEvents: AccessMetadata[] = [];
   private notifications: Notification[] = [];
+  private emergencySessions: EmergencySession[] = [];
+  private emergencyJustifications: Array<{
+    id: string;
+    session_id: string;
+    author_id: string;
+    submitted_at: string;
+    narrative: string;
+  }> = [];
 
   constructor() {
     this.reset();
@@ -231,6 +259,8 @@ export class MockAuthService {
     this.consentGrants = [];
     this.accessEvents = [];
     this.notifications = [];
+    this.emergencySessions = [];
+    this.emergencyJustifications = [];
   }
 
   suspendMembership(membershipId: string) {
@@ -277,6 +307,34 @@ export class MockAuthService {
 
     if (path === "/encounters" && request.method === "POST") {
       return this.handleCreateEncounter(request, now);
+    }
+
+    if (path === "/emergency/sessions" && request.method === "POST") {
+      return this.handleActivateEmergency(request, now);
+    }
+
+    const emergencyActionMatch = path.match(
+      /^\/emergency\/sessions\/([^/]+)\/(records|expand|justify|revoke)$/,
+    );
+    if (emergencyActionMatch) {
+      const [, sessionId, action] = emergencyActionMatch;
+      if (action === "records" && request.method === "GET") {
+        return this.handleEmergencyRecords(request, now, sessionId);
+      }
+      if (action === "expand" && request.method === "POST") {
+        return this.handleExpandEmergency(request, now, sessionId);
+      }
+      if (action === "justify" && request.method === "POST") {
+        return this.handleJustifyEmergency(request, now, sessionId);
+      }
+      if (action === "revoke" && request.method === "POST") {
+        return this.handleRevokeEmergency(request, now, sessionId);
+      }
+    }
+
+    const emergencySessionMatch = path.match(/^\/emergency\/sessions\/([^/]+)$/);
+    if (emergencySessionMatch && request.method === "GET") {
+      return this.handleEmergencyStatus(request, now, emergencySessionMatch[1]);
     }
 
     const sourceMatch = path.match(/^\/exchange\/patients\/([^/]+)\/sources$/);
@@ -694,7 +752,7 @@ export class MockAuthService {
     if (this.suspendedMemberships.has(identity.membershipId)) {
       return genericError(403, "CONTEXT_DENIED", "Your current work context is no longer active.");
     }
-    if (!receivingEncounterId || purpose !== "treatment") {
+    if (!receivingEncounterId || !["treatment", "emergency_treatment"].includes(purpose)) {
       return genericError(422, "VALIDATION_ERROR", "The request could not be validated.");
     }
 
@@ -706,6 +764,9 @@ export class MockAuthService {
         entry.status === "OPEN",
     );
     if (!encounter) return genericError(404, "NOT_FOUND", "The requested patient was not found.");
+    if (purpose === "emergency_treatment" && encounter.type !== "EMERGENCY") {
+      return genericError(404, "NOT_FOUND", "The requested patient was not found.");
+    }
 
     const remoteSource = this.sourceFor(DEMO_MERCY_ORGANIZATION_ID);
     if (!remoteSource || remoteSource.organization_id === identity.organization.organization_id) {
@@ -889,9 +950,10 @@ export class MockAuthService {
       expected_version: number;
     };
     const selectedDomains = approval.selected_domains;
+    const requestedDomainSet = new Set<string>(consentRequest.requested_domains);
     if (
       new Set(selectedDomains).size !== selectedDomains.length ||
-      selectedDomains.some((domain) => !consentRequest.requested_domains.includes(domain))
+      selectedDomains.some((domain) => !requestedDomainSet.has(domain))
     ) {
       return genericError(409, "SCOPE_CHANGED", "The selected scope is no longer available.");
     }
@@ -995,6 +1057,631 @@ export class MockAuthService {
     return response;
   }
 
+  private handleActivateEmergency(request: MockRequest, now: Date): MockResponse {
+    const authorization = this.authorizeMutation(request, now);
+    if ("status" in authorization) return authorization;
+    const { session, identity, idempotencyKey } = authorization;
+    const parsed = emergencyActivateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return genericError(
+        422,
+        "VALIDATION_ERROR",
+        "The emergency request could not be validated.",
+        validationDetails(parsed.error),
+      );
+    }
+    const body = parsed.data;
+    const mutationKey = this.mutationKey(request, idempotencyKey, session.id);
+    const replay = this.getReplay(mutationKey, body);
+    if (replay) return replay;
+
+    if (!this.canActivateEmergency(identity)) {
+      return genericError(
+        403,
+        "POLICY_DENIED",
+        "This work context cannot activate an emergency session.",
+      );
+    }
+    if (body.patient_id !== identity.patientId || !identity.organization) {
+      return genericError(404, "NOT_FOUND", "The requested patient was not found.");
+    }
+    const source = this.sourceFor(body.source_org_id);
+    const encounter = this.encounters.find(
+      (entry) =>
+        entry.id === body.receiving_encounter_id &&
+        entry.patient_id === body.patient_id &&
+        entry.organization_id === identity.organization?.organization_id &&
+        entry.status === "OPEN" &&
+        entry.type === "EMERGENCY",
+    );
+    if (!source || !encounter) {
+      return genericError(404, "NOT_FOUND", "The requested emergency context was not found.");
+    }
+
+    const emergencySession: EmergencySession = {
+      id: createId(),
+      patient_id: body.patient_id,
+      source_org_id: source.organization_id,
+      recipient_org_id: identity.organization.organization_id,
+      practitioner_id: identity.user.id,
+      receiving_encounter_id: encounter.id,
+      reason_code: body.reason_code,
+      status: "ACTIVE_SUMMARY",
+      level: 1,
+      expanded_domains: [],
+      started_at: serializeDate(now),
+      expires_at: serializeDate(new Date(now.getTime() + EMERGENCY_SESSION_TIMEOUT_MS)),
+      justification_due_at: serializeDate(
+        new Date(now.getTime() + EMERGENCY_JUSTIFICATION_WINDOW_MS),
+      ),
+      justification_status: "PENDING",
+      revoked_at: null,
+      version: 1,
+    };
+    emergencySessionSchema.parse(emergencySession);
+    this.emergencySessions.push(emergencySession);
+
+    const summary = this.buildEmergencySummary(emergencySession, now);
+    const responseBody = { session: emergencySession, summary, correlation_id: createId() };
+    emergencyActivationResponseSchema.parse(responseBody);
+    const response = success(201, responseBody);
+    this.mutations.set(mutationKey, { fingerprint: canonicalize(body), response });
+    this.addEmergencyAccessEvent(emergencySession, source, identity, now, "EMERGENCY_ACTIVATED");
+    this.addEmergencyNotification(emergencySession, now, "EMERGENCY_ACTIVATED");
+    return response;
+  }
+
+  private handleEmergencyStatus(request: MockRequest, now: Date, sessionId: string): MockResponse {
+    const authorization = this.authorizeEmergencySession(request, now, sessionId, true);
+    if ("status" in authorization) return authorization;
+    const { emergency } = authorization;
+    this.refreshEmergencySession(emergency, now);
+    const body = {
+      session: emergency,
+      justification_history: this.emergencyJustifications.filter(
+        (item) => item.session_id === emergency.id,
+      ),
+      next_cursor: null,
+      correlation_id: createId(),
+    };
+    emergencyStatusResponseSchema.parse(body);
+    return success(200, body);
+  }
+
+  private handleEmergencyRecords(request: MockRequest, now: Date, sessionId: string): MockResponse {
+    const authorization = this.authorizeEmergencySession(request, now, sessionId);
+    if ("status" in authorization) return authorization;
+    const { emergency, identity } = authorization;
+    this.refreshEmergencySession(emergency, now);
+    if (emergency.status === "EXPIRED" || emergency.status === "REVOKED") {
+      return genericError(
+        403,
+        emergency.status === "EXPIRED" ? "EMERGENCY_EXPIRED" : "EMERGENCY_REVOKED",
+        "This emergency session is no longer active.",
+      );
+    }
+
+    const view = getQueryValue(request.query, "view");
+    if (view !== "summary" && view !== "expanded") {
+      return genericError(422, "VALIDATION_ERROR", "The emergency view could not be validated.");
+    }
+    if (view === "summary") {
+      const source = this.sourceFor(emergency.source_org_id);
+      if (!source) return genericError(503, "SOURCE_UNAVAILABLE", "The source is unavailable.");
+      const summary = this.buildEmergencySummary(emergency, now);
+      const body = {
+        view: "summary" as const,
+        session: emergency,
+        summary,
+        correlation_id: createId(),
+      };
+      emergencyRecordsResponseSchema.parse(body);
+      return success(200, body);
+    }
+
+    const rawDomains = getQueryValues(request.query, "domains");
+    const parsedDomains = rawDomains.map((domain) => emergencyDomainSchema.safeParse(domain));
+    if (rawDomains.length === 0 || parsedDomains.some((parsed) => !parsed.success)) {
+      return genericError(422, "VALIDATION_ERROR", "The emergency domains could not be validated.");
+    }
+    const domains = parsedDomains.map((parsed) => (parsed.success ? parsed.data : "history"));
+    const expanded = new Set(emergency.expanded_domains);
+    if (domains.some((domain) => !expanded.has(domain))) {
+      return genericError(403, "POLICY_DENIED", "The requested domain is outside this session.");
+    }
+    const source = this.sourceFor(emergency.source_org_id);
+    if (!source) return genericError(503, "SOURCE_UNAVAILABLE", "The source is unavailable.");
+    const domainSet = new Set(domains);
+    const records = this.records
+      .filter(
+        (record) =>
+          record.patient_id === emergency.patient_id &&
+          record.source.organization_id === emergency.source_org_id &&
+          domainSet.has(record.domain as EmergencyDomain) &&
+          this.canIncludeEmergencyRecord(record, emergency.source_org_id),
+      )
+      .map((record) => this.projectRecord(record, identity));
+    const collection: RecordCollection = {
+      items: records,
+      next_cursor: null,
+      correlation_id: createId(),
+      source,
+      retrieved_at: serializeDate(now),
+      completeness_notice:
+        "Information may be unavailable or specially protected; absence is not confirmation of no condition.",
+    };
+    recordCollectionSchema.parse(collection);
+    const body = {
+      view: "expanded" as const,
+      session: emergency,
+      records: collection,
+      correlation_id: createId(),
+    };
+    emergencyRecordsResponseSchema.parse(body);
+    this.addEmergencyAccessEvent(emergency, source, identity, now, "EMERGENCY_EXPANDED", domains);
+    return success(200, body);
+  }
+
+  private handleExpandEmergency(request: MockRequest, now: Date, sessionId: string): MockResponse {
+    const authorization = this.authorizeEmergencySession(request, now, sessionId);
+    if ("status" in authorization) return authorization;
+    const { session, identity, emergency, idempotencyKey } = authorization;
+    this.refreshEmergencySession(emergency, now);
+    if (emergency.status === "EXPIRED" || emergency.status === "REVOKED") {
+      return genericError(
+        403,
+        "EMERGENCY_SESSION_INACTIVE",
+        "This emergency session is no longer active.",
+      );
+    }
+    if (emergency.justification_status === "JUSTIFICATION_OVERDUE") {
+      return genericError(
+        403,
+        "EMERGENCY_JUSTIFICATION_OVERDUE",
+        "Submit the emergency justification before requesting more records.",
+      );
+    }
+    if (!this.canExpandEmergency(identity)) {
+      return genericError(
+        403,
+        "POLICY_DENIED",
+        "This work context cannot expand the emergency scope.",
+      );
+    }
+    const parsed = emergencyExpansionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return genericError(
+        422,
+        "VALIDATION_ERROR",
+        "The emergency expansion could not be validated.",
+        validationDetails(parsed.error),
+      );
+    }
+    const body = parsed.data;
+    const mutationKey = this.mutationKey(request, idempotencyKey, session.id);
+    const replay = this.getReplay(mutationKey, body);
+    if (replay) return replay;
+    const domainSet = new Set(body.domains);
+    if (domainSet.size !== body.domains.length) {
+      return genericError(409, "SCOPE_CHANGED", "Choose each emergency domain once.");
+    }
+    if (
+      body.domains.some((domain) => !this.canExpandEmergencyDomain(domain, emergency.source_org_id))
+    ) {
+      return genericError(
+        403,
+        "POLICY_DENIED",
+        "The source policy does not allow that emergency domain.",
+      );
+    }
+    if (body.expected_version !== emergency.version) {
+      return genericError(
+        409,
+        "VERSION_CONFLICT",
+        "This emergency session changed before the request arrived.",
+      );
+    }
+    const existing = new Set(emergency.expanded_domains);
+    if (body.domains.some((domain) => existing.has(domain))) {
+      return genericError(409, "SCOPE_CHANGED", "The requested domain is already in this session.");
+    }
+    emergency.expanded_domains = [...emergency.expanded_domains, ...body.domains];
+    emergency.level = 2;
+    emergency.status = "ACTIVE_EXPANDED";
+    emergency.version += 1;
+    const source = this.sourceFor(emergency.source_org_id);
+    if (!source) return genericError(503, "SOURCE_UNAVAILABLE", "The source is unavailable.");
+    const records = this.records.filter(
+      (record) =>
+        record.patient_id === emergency.patient_id &&
+        record.source.organization_id === emergency.source_org_id &&
+        domainSet.has(record.domain as EmergencyDomain) &&
+        this.canIncludeEmergencyRecord(record, emergency.source_org_id),
+    );
+    const collection: RecordCollection = {
+      items: records,
+      next_cursor: null,
+      correlation_id: createId(),
+      source,
+      retrieved_at: serializeDate(now),
+      completeness_notice:
+        "Information may be unavailable or specially protected; absence is not confirmation of no condition.",
+    };
+    recordCollectionSchema.parse(collection);
+    const responseBody = {
+      view: "expanded" as const,
+      session: emergency,
+      records: collection,
+      correlation_id: createId(),
+    };
+    emergencyRecordsResponseSchema.parse(responseBody);
+    const response = success(200, responseBody);
+    this.mutations.set(mutationKey, { fingerprint: canonicalize(body), response });
+    this.addEmergencyNotification(emergency, now, "EMERGENCY_EXPANDED", body.domains);
+    this.addEmergencyAccessEvent(
+      emergency,
+      source,
+      identity,
+      now,
+      "EMERGENCY_EXPANDED",
+      body.domains,
+    );
+    return response;
+  }
+
+  private handleJustifyEmergency(request: MockRequest, now: Date, sessionId: string): MockResponse {
+    const authorization = this.authorizeEmergencySession(request, now, sessionId);
+    if ("status" in authorization) return authorization;
+    const { session, identity, emergency, idempotencyKey } = authorization;
+    this.refreshEmergencySession(emergency, now);
+    const parsed = emergencyJustificationCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return genericError(
+        422,
+        "VALIDATION_ERROR",
+        "The emergency justification could not be validated.",
+        validationDetails(parsed.error),
+      );
+    }
+    const body = parsed.data;
+    const mutationKey = this.mutationKey(request, idempotencyKey, session.id);
+    const replay = this.getReplay(mutationKey, body);
+    if (replay) return replay;
+    const justification = {
+      id: createId(),
+      session_id: emergency.id,
+      author_id: identity.user.id,
+      submitted_at: serializeDate(now),
+      narrative: body.narrative,
+    };
+    emergencyJustificationSchema.parse(justification);
+    this.emergencyJustifications.push(justification);
+    emergency.justification_status = "SUBMITTED";
+    emergency.version += 1;
+    const responseBody = { justification, session: emergency, correlation_id: createId() };
+    emergencyJustificationResponseSchema.parse(responseBody);
+    const response = success(201, responseBody);
+    this.mutations.set(mutationKey, { fingerprint: canonicalize(body), response });
+    const source = this.sourceFor(emergency.source_org_id);
+    if (source) {
+      this.addEmergencyNotification(emergency, now, "JUSTIFICATION_SUBMITTED");
+      this.addEmergencyAccessEvent(
+        emergency,
+        source,
+        identity,
+        now,
+        "JUSTIFICATION_SUBMITTED",
+        emergency.expanded_domains,
+      );
+    }
+    return response;
+  }
+
+  private handleRevokeEmergency(request: MockRequest, now: Date, sessionId: string): MockResponse {
+    const authorization = this.authorizeEmergencySession(request, now, sessionId, true);
+    if ("status" in authorization) return authorization;
+    const { session, identity, emergency, idempotencyKey } = authorization;
+    if (identity.role !== "SECURITY_ADMIN") {
+      return genericError(
+        403,
+        "POLICY_DENIED",
+        "Only an authorized security administrator can revoke this session.",
+      );
+    }
+    const parsed = emergencyRevokeSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return genericError(
+        422,
+        "VALIDATION_ERROR",
+        "The emergency revocation could not be validated.",
+        validationDetails(parsed.error),
+      );
+    }
+    const body = parsed.data;
+    const mutationKey = this.mutationKey(request, idempotencyKey, session.id);
+    const replay = this.getReplay(mutationKey, body);
+    if (replay) return replay;
+    this.refreshEmergencySession(emergency, now);
+    if (emergency.status === "EXPIRED" || emergency.status === "REVOKED") {
+      return genericError(409, "STATE_CONFLICT", "This emergency session has already ended.");
+    }
+    if (body.expected_version !== emergency.version) {
+      return genericError(
+        409,
+        "VERSION_CONFLICT",
+        "This emergency session changed before revocation.",
+      );
+    }
+    emergency.status = "REVOKED";
+    emergency.revoked_at = serializeDate(now);
+    emergency.version += 1;
+    const responseBody = { session: emergency, correlation_id: createId() };
+    emergencySessionResponseSchema.parse(responseBody);
+    const response = success(200, responseBody);
+    this.mutations.set(mutationKey, { fingerprint: canonicalize(body), response });
+    return response;
+  }
+
+  private authorizeEmergencySession(
+    request: MockRequest,
+    now: Date,
+    sessionId: string,
+    allowSecurityAdmin = false,
+  ) {
+    const session = this.getSession(request, now);
+    if (!session)
+      return genericError(401, "AUTHENTICATION_REQUIRED", "Authentication is required.");
+    const idempotencyKey = getHeader(request.headers, "Idempotency-Key");
+    if (
+      request.method === "POST" &&
+      (!idempotencyKey || idempotencyKey.length < 16 || idempotencyKey.length > 128)
+    ) {
+      return genericError(422, "VALIDATION_ERROR", "The request could not be validated.", [
+        { field: "Idempotency-Key", code: "REQUIRED" },
+      ]);
+    }
+    if (
+      request.method === "POST" &&
+      getHeader(request.headers, "X-CSRF-Token") !== session.csrfToken
+    ) {
+      return genericError(403, "CSRF_INVALID", "This request is no longer valid.");
+    }
+    const identity = mockIdentities.find((entry) => entry.user.id === session.identityId);
+    const emergency = this.emergencySessions.find((entry) => entry.id === sessionId);
+    if (!identity || !emergency)
+      return genericError(404, "NOT_FOUND", "The emergency session was not found.");
+    if (identity.membershipId && this.suspendedMemberships.has(identity.membershipId)) {
+      return genericError(403, "CONTEXT_DENIED", "Your current work context is no longer active.");
+    }
+    const isOwner = identity.user.id === emergency.practitioner_id;
+    const isSecurityAdmin =
+      allowSecurityAdmin &&
+      identity.role === "SECURITY_ADMIN" &&
+      identity.organization &&
+      [emergency.source_org_id, emergency.recipient_org_id].includes(
+        identity.organization.organization_id,
+      );
+    if (!isOwner && !isSecurityAdmin) {
+      return genericError(404, "NOT_FOUND", "The emergency session was not found.");
+    }
+    return { session, identity, emergency, idempotencyKey: idempotencyKey ?? "" };
+  }
+
+  private refreshEmergencySession(emergency: EmergencySession, now: Date) {
+    if (
+      emergency.justification_status === "PENDING" &&
+      now.getTime() >= new Date(emergency.justification_due_at).getTime()
+    ) {
+      emergency.justification_status = "JUSTIFICATION_OVERDUE";
+      emergency.version += 1;
+    }
+    if (
+      (emergency.status === "ACTIVE_SUMMARY" || emergency.status === "ACTIVE_EXPANDED") &&
+      now.getTime() >= new Date(emergency.expires_at).getTime()
+    ) {
+      emergency.status = "EXPIRED";
+      emergency.version += 1;
+    }
+    emergencySessionSchema.parse(emergency);
+  }
+
+  private canActivateEmergency(identity: MockIdentity) {
+    return Boolean(
+      identity.user.kind === "STAFF" &&
+      identity.organization &&
+      identity.membershipId &&
+      identity.role === "EMERGENCY_DOCTOR" &&
+      identity.permissions.includes("emergency.activate_with_context") &&
+      identity.shiftId &&
+      identity.active &&
+      identity.membershipActive,
+    );
+  }
+
+  private canExpandEmergency(identity: MockIdentity) {
+    return Boolean(
+      identity.user.kind === "STAFF" &&
+      identity.role === "EMERGENCY_DOCTOR" &&
+      identity.permissions.includes("emergency.activate_with_context"),
+    );
+  }
+
+  private canExpandEmergencyDomain(domain: Domain | EmergencyDomain, sourceOrganizationId: string) {
+    void sourceOrganizationId;
+    return !["mental_health", "hiv", "genetic", "nursing_notes", "physiotherapy_notes"].includes(
+      domain,
+    );
+  }
+
+  private canIncludeEmergencyRecord(record: ClinicalRecord, sourceOrganizationId: string) {
+    return (
+      record.sensitivity !== "RESTRICTED" &&
+      this.canExpandEmergencyDomain(record.domain as EmergencyDomain, sourceOrganizationId)
+    );
+  }
+
+  private buildEmergencySummary(emergency: EmergencySession, now: Date): EmergencySummary {
+    const source = this.sourceFor(emergency.source_org_id);
+    if (!source) throw new Error("Emergency source unavailable");
+    const sourceRecords = this.records.filter(
+      (record) =>
+        record.patient_id === emergency.patient_id &&
+        record.source.organization_id === emergency.source_org_id &&
+        record.sensitivity !== "RESTRICTED",
+    );
+    const demographics = sourceRecords.find((record) => record.domain === "demographics");
+    const demographicsPayload = demographics?.payload;
+    const patient = {
+      patient_id: emergency.patient_id,
+      health_id: `RSH-${emergency.patient_id}`,
+      name:
+        demographicsPayload && "name" in demographicsPayload ? demographicsPayload.name : "Patient",
+      date_of_birth:
+        demographicsPayload && "date_of_birth" in demographicsPayload
+          ? demographicsPayload.date_of_birth
+          : "1970-01-01",
+    };
+    const summaryItem = (record: ClinicalRecord, text: string) => ({
+      record_id: record.id,
+      text,
+      source: record.source,
+      observed_at: record.observed_at,
+      retrieved_at: serializeDate(now),
+    });
+    const allergies = sourceRecords
+      .filter((record) => record.domain === "allergies" && "substance" in record.payload)
+      .map((record) => {
+        const payload = record.payload as {
+          substance: string;
+          reaction: string;
+          severity: string;
+          status: string;
+        };
+        return summaryItem(
+          record,
+          `${payload.substance} — ${payload.reaction}; ${payload.severity}; ${payload.status}`,
+        );
+      });
+    const medications = sourceRecords
+      .filter(
+        (record) =>
+          record.domain === "medications" &&
+          "name" in record.payload &&
+          "active" in record.payload &&
+          record.payload.active === true,
+      )
+      .map((record) => {
+        const payload = record.payload as {
+          name: string;
+          dose_text: string;
+          route: string;
+          frequency: string;
+        };
+        return summaryItem(
+          record,
+          `${payload.name} — ${payload.dose_text}, ${payload.route}, ${payload.frequency}`,
+        );
+      });
+    const diagnoses = sourceRecords
+      .filter(
+        (record) =>
+          record.domain === "diagnoses" &&
+          "text" in record.payload &&
+          "status" in record.payload &&
+          record.payload.status === "active",
+      )
+      .map((record) => {
+        const payload = record.payload as { text: string };
+        return summaryItem(record, payload.text);
+      });
+    const recentInvestigationCutoff = now.getTime() - 90 * 24 * 60 * 60 * 1000;
+    const investigations = sourceRecords
+      .filter(
+        (record) =>
+          record.domain === "investigations" &&
+          new Date(record.observed_at).getTime() >= recentInvestigationCutoff &&
+          "type" in record.payload,
+      )
+      .map((record) => {
+        const payload = record.payload as {
+          type: string;
+          result_text: string | null;
+          status: string;
+        };
+        return summaryItem(record, `${payload.type} — ${payload.result_text ?? payload.status}`);
+      });
+    const unknown = { status: "UNKNOWN" as const, items: [] };
+    const available = <T extends ReturnType<typeof summaryItem>>(items: T[]) => ({
+      status: items.length ? ("AVAILABLE" as const) : ("UNKNOWN" as const),
+      items,
+    });
+    const summary: EmergencySummary = {
+      patient,
+      source,
+      blood_group: unknown,
+      allergies: available(allergies),
+      active_medications: available(medications),
+      critical_conditions: unknown,
+      major_diagnoses: available(diagnoses),
+      major_procedures: unknown,
+      recent_investigations: available(investigations),
+      critical_alerts: unknown,
+      retrieved_at: serializeDate(now),
+      completeness_notice:
+        "This bounded summary is not a complete record; absence is not confirmation of no condition.",
+    };
+    return emergencySummarySchema.parse(summary);
+  }
+
+  private addEmergencyAccessEvent(
+    emergency: EmergencySession,
+    source: Source,
+    identity: MockIdentity,
+    now: Date,
+    eventType: AccessMetadata["event_type"],
+    domains: EmergencyDomain[] = [],
+  ) {
+    this.accessEvents.push({
+      event_id: createId(),
+      practitioner_id: identity.user.id,
+      practitioner_name: this.practitionerName(identity),
+      source,
+      recipient: identity.organization as Source,
+      occurred_at: serializeDate(now),
+      purpose: "treatment",
+      domains: domains as AccessMetadata["domains"],
+      basis: "EMERGENCY",
+      outcome: "ALLOWED",
+      event_type: eventType,
+      justification_submitted: emergency.justification_status === "SUBMITTED",
+    });
+  }
+
+  private addEmergencyNotification(
+    emergency: EmergencySession,
+    now: Date,
+    type: Notification["type"],
+    domains: EmergencyDomain[] = emergency.expanded_domains,
+  ) {
+    const notification: Notification = {
+      id: createId(),
+      event_id: createId(),
+      type,
+      created_at: serializeDate(now),
+      seen_at: null,
+      metadata: {
+        source_org_id: emergency.source_org_id,
+        recipient_org_id: emergency.recipient_org_id,
+        practitioner_id: emergency.practitioner_id,
+        request_id: null,
+        session_id: emergency.id,
+        domains: domains as Notification["metadata"]["domains"],
+      },
+    };
+    notificationSchema.parse(notification);
+    this.notifications.unshift(notification);
+  }
+
   private handleRemoteRecords(request: MockRequest, now: Date, patientId: string): MockResponse {
     const session = this.getSession(request, now);
     if (!session)
@@ -1033,17 +1720,19 @@ export class MockAuthService {
       return genericError(422, "VALIDATION_ERROR", "The request could not be validated.");
     }
     const parsedDomains = domains.map((parsed) => (parsed.success ? parsed.data : "demographics"));
-    if (parsedDomains.some((domain) => !grant.domains.includes(domain))) {
+    const grantDomainSet = new Set<string>(grant.domains);
+    if (parsedDomains.some((domain) => !grantDomainSet.has(domain))) {
       return genericError(403, "POLICY_DENIED", "The approved scope does not include this domain.");
     }
     const source = this.sourceFor(sourceId);
     if (!source)
       return genericError(503, "SOURCE_UNAVAILABLE", "The remote source is unavailable.");
+    const parsedDomainSet = new Set<string>(parsedDomains);
     const records = this.records.filter(
       (record) =>
         record.patient_id === patientId &&
         record.source.organization_id === sourceId &&
-        parsedDomains.includes(record.domain as (typeof parsedDomains)[number]),
+        parsedDomainSet.has(record.domain),
     );
     const body = {
       items: records,
@@ -1408,7 +2097,7 @@ export class MockAuthService {
         local_patient_id: "HSP-99210",
         ward_id: DEMO_UNITY_WARD_ID,
         attending_membership_id: "00000000-0000-4000-8000-000000000005",
-        type: "ROUTINE",
+        type: "EMERGENCY",
         status: "OPEN",
         started_at: serializeDate(new Date(now.getTime() - 90 * 60 * 1000)),
         ended_at: null,

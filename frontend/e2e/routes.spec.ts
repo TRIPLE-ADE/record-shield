@@ -50,6 +50,31 @@ test("opens the current patient context and writes a local nursing note", async 
   ).toBeVisible();
 });
 
+test("activates a bounded emergency summary and requests one explicit domain", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Amina Yusuf" }).click();
+  await page.getByRole("button", { name: "Enter workspace" }).click();
+  await page.getByRole("link", { name: "Open current encounter" }).click();
+  await page.getByRole("link", { name: "Open emergency summary" }).click();
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Activate a bounded patient summary",
+  );
+  await page.getByLabel("Source facility").selectOption("00000000-0000-4000-8000-000000000002");
+  await page.getByRole("checkbox", { name: /I confirm this is necessary now/ }).check();
+  await page.getByRole("button", { name: "Activate emergency summary" }).click();
+
+  await expect(page.getByRole("heading", { name: "Bounded clinical summary" })).toBeVisible();
+  await expect(page.getByText(/Penicillin — Rash; moderate; active/)).toBeVisible();
+  await page.getByRole("button", { name: "Choose Level 2 domains" }).click();
+  await page.getByRole("checkbox", { name: "Allergies" }).check();
+  await page
+    .getByLabel("Why is this needed for immediate treatment?")
+    .fill("Confirm the recorded allergy before selecting an immediate medication.");
+  await page.getByRole("button", { name: "Request Level 2 access" }).click();
+  await expect(page.getByText("Level 2 records")).toBeVisible();
+});
+
 test("completes a patient-approved source exchange", async ({ page }) => {
   await page.goto("/login");
   await page.getByRole("button", { name: "Amina Yusuf" }).click();
@@ -63,17 +88,22 @@ test("completes a patient-approved source exchange", async ({ page }) => {
     .getByRole("textbox", { name: "Patient-visible reason" })
     .fill("Review source allergies before confirming the current treatment plan.");
   await page.getByRole("button", { name: "Send consent request" }).click();
-  await expect(page.getByRole("button", { name: "Cancel request" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel request" }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.getByRole("button", { name: "Musa Ibrahim" }).click();
   await page.getByRole("button", { name: "Enter workspace" }).click();
+  await expect(page).toHaveURL(/\/workspace$/);
   await page.goto("/portal");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Review who can access/);
-  await page.getByRole("checkbox", { name: "Allergies" }).click();
-  await page.getByRole("button", { name: "Approve selected access" }).click();
-  await expect(page.getByText(/Dr Amina Yusuf · Mercy General/)).toBeVisible();
+  const pendingRequest = page
+    .locator("form")
+    .filter({ hasText: "Review source allergies" })
+    .first();
+  await pendingRequest.getByRole("checkbox", { name: "Allergies" }).click();
+  await pendingRequest.getByRole("button", { name: "Approve selected access" }).click();
+  await expect(page.getByText(/Dr Amina Yusuf · Mercy General/).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
