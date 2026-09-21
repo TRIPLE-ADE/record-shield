@@ -1,0 +1,8 @@
+# Local state and secrets never enter the repository.
+.terraform/
+.terraform.tfstate.lock.info
+*.tfstate
+*.tfstate.*
+*.tfvars
+!terraform.tfvars.example
+crash.log

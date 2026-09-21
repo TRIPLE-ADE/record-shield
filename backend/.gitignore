@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+RecordShield_PRD_and_Architecture.pdf
+PLAN.md
+audit.sqlite
+.env.production

@@ -1,0 +1,23 @@
+name: recordshield
+
+services:
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: recordshield
+      MYSQL_USER: recordshield
+      MYSQL_PASSWORD: recordshield
+      MYSQL_ROOT_PASSWORD: recordshield-root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysqldata:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-urecordshield", "-precordshield"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mysqldata:

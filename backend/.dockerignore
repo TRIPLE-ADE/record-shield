@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+.env
+.pytest_cache
+.ruff_cache
+.mypy_cache
+audit.sqlite
+RecordShield_PRD_and_Architecture.pdf
+PLAN.md
+tests
+.env.production
