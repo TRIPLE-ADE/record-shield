@@ -31,7 +31,7 @@ export function RecordComposer({
       <PatientRecordsState
         kind="unavailable"
         title="An open encounter is required to add a record"
-        description="The current patient context has no encounter available for a new local record."
+        description="This patient has no available visit for a new record."
       />
     );
   }

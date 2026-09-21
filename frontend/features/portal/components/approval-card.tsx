@@ -62,7 +62,7 @@ export function ApprovalCard({ request }: { request: ConsentRequest }) {
       </div>
       <div className="mt-4">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Choose domains
+          Choose records to share
         </p>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {request.requested_domains.map((domain) => {
@@ -95,7 +95,7 @@ export function ApprovalCard({ request }: { request: ConsentRequest }) {
           })}
         </div>
         {form.formState.errors.selected_domains ? (
-          <p className="mt-1 text-xs text-destructive">Choose at least one domain.</p>
+          <p className="mt-1 text-xs text-destructive">Choose at least one record category.</p>
         ) : null}
       </div>
       <div className="mt-4 space-y-1.5">

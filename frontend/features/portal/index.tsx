@@ -27,7 +27,12 @@ export default function PortalPage() {
     return <PortalState title="Portal unavailable" description={portal.error.message} />;
   }
   if (!portal.data) {
-    return <PortalState title="Portal unavailable" description="No portal context was returned." />;
+    return (
+      <PortalState
+        title="Portal unavailable"
+        description="We couldn’t load your account. Please sign in again."
+      />
+    );
   }
 
   return (

@@ -3,3 +3,4 @@ export { WorkspaceOverview } from "./workspace-overview";
 export { ContextItem } from "./context-item";
 export { NextStepCard } from "./next-step-card";
 export { WorkspaceLoading } from "./workspace-loading";
+export { PatientContextCard } from "./patient-context-card";

@@ -140,13 +140,13 @@ export function SourceRequestPanel({
             Define the request
           </CardTitle>
           <CardDescription>
-            The patient sees this reason, practitioner, source, and exact domain set.
+            The patient will see your name, the hospital, your reason, and the records you request.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-5 pb-6 sm:px-6">
           <form className="space-y-5" onSubmit={submitRequest}>
             <div>
-              <p className="text-sm font-medium">Domains requested</p>
+              <p className="text-sm font-medium">Records to request</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {requestDomains.map((domain) => {
                   const checked = selectedDomainSet.has(domain.value);
@@ -187,7 +187,7 @@ export function SourceRequestPanel({
               ) : null}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="consent-reason">Patient-visible reason</Label>
+              <Label htmlFor="consent-reason">Reason for this request</Label>
               <Textarea
                 id="consent-reason"
                 placeholder="Explain why these source records are relevant to current treatment…"
@@ -206,7 +206,7 @@ export function SourceRequestPanel({
                 type="submit"
                 disabled={!sourceId || !receivingEncounterId || requestMutation.isPending}
               >
-                {requestMutation.isPending ? "Sending…" : "Send consent request"}
+                {requestMutation.isPending ? "Sending…" : "Send request"}
                 <ArrowRightIcon aria-hidden="true" />
               </Button>
             </div>

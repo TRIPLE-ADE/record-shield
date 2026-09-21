@@ -54,6 +54,7 @@ export const sessionContextSchema = z.strictObject({
   organization: sourceSchema.nullable(),
   patient_id: uuid.nullable(),
   shift: shiftSchema.nullable(),
+  security_stream_id: uuid.nullable(),
   permissions_summary: z.array(z.string().min(1).max(100)).max(50),
   csrf_token: z.string().min(32).max(128),
   idle_expires_at: utcDateTime,

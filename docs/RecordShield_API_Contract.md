@@ -86,6 +86,8 @@ Emergency Summary uses eight fixed sections; UNKNOWN with empty items means no r
 
 | 04 | GET | `/api/v1/me` | 200 |
 
+| 05A | GET | `/api/v1/patients` | 200 |
+
 | 05 | GET | `/api/v1/patients/{id}/records/{domain}` | 200 |
 
 | 06 | POST | `/api/v1/patients/{id}/records/{domain}` | 201 |
@@ -229,6 +231,7 @@ Schema: **SessionContext**.
     "ends_at": "2026-09-20T16:00:00Z",
     "active": true
   },
+  "security_stream_id": null,
   "permissions_summary": [
     "local_records.read_with_context",
     "consent.request",
@@ -285,6 +288,8 @@ Empty body.
 
 Reload current role, membership, trust and duty context. Permission strings describe possible actions, never a decision for a patient. Patient login returns patient_id, null membership/role/organization/shift. Trust operator returns TRUST_OPERATOR with null membership/organization/shift. Suspension denies protected access; no cached authorization.
 
+`security_stream_id` is a server-derived authorized audit stream UUID. It is populated only for a security administrator or trust operator whose current context may read the corresponding stream, and is `null` for every other context. Clients must use this value for security event, alert and chain requests; they must not infer a stream from a client-selected organization or fixture identifier.
+
 ### Request body
 
 None. Do not send a JSON body.
@@ -314,6 +319,7 @@ Schema: **SessionContext**.
     "ends_at": "2026-09-20T16:00:00Z",
     "active": true
   },
+  "security_stream_id": null,
   "permissions_summary": [
     "local_records.read_with_context",
     "consent.request",
@@ -329,6 +335,65 @@ Schema: **SessionContext**.
 ### Error responses
 
 `401`, `403`, `404`, `422`, `503`, `405`, `500`. Use the shared Error body and the safe codes defined above.
+
+
+## 05A · List assigned patients
+
+`GET /api/v1/patients`
+
+**Caller:** authorized local staff with an active care, task or ward context.
+
+Return the patient directory resolved from the authenticated caller's current scope. The client never supplies an organization, practitioner or patient filter to widen access; the server derives the scope from the session and applies authorization before pagination. Each item contains the minimum identity and local source context needed to choose a patient. Do not return record counts, restricted-domain presence, or hidden totals.
+
+Search matches a case-insensitive substring of name, health ID or local patient ID within the caller’s existing authorized collection only. Trim the search value; empty means no filter. Apply authorization and search before pagination. Keep stable ordering across pages, bind cursors to actor, scope, normalized search and limit, and reject invalid, expired or mismatched cursors with 422. Search never discovers patients outside the care scope. The mock uses opaque server-stored cursor tokens with a five-minute lifetime; the production service may use signed opaque cursors with equivalent validation.
+
+### Parameters
+
+| Name | Location | Required | Type and constraints |
+
+| --- | --- | --- | --- |
+
+| `cursor` | query | no | string; opaque cursor bound to actor, scope and ordering. |
+
+| `limit` | query | no | integer; default=25; minimum=1; maximum=100. |
+
+| `search` | query | no | string; maximum=100; trimmed, case-insensitive substring of name, health ID or local patient ID within authorized scope. |
+
+### Request body
+
+None. Do not send a JSON body.
+
+### 200 response body
+
+Schema: **PatientDirectoryCollection**.
+
+```json
+{
+  "items": [
+    {
+      "patient_id": "00000000-0000-4000-8000-000000000001",
+      "health_id": "RSH-00000000-0000-4000-8000-000000000001",
+      "name": "Musa Ibrahim",
+      "date_of_birth": "1987-04-12",
+      "local_patient_id": "HSP-99210",
+      "organization": {
+        "organization_id": "00000000-0000-4000-8000-000000000003",
+        "name": "Unity Medical",
+        "mode": "LITE"
+      },
+      "latest_encounter_at": "2026-09-20T10:00:00Z"
+    }
+  ],
+  "next_cursor": null,
+  "correlation_id": "00000000-0000-4000-8000-000000000016",
+  "retrieved_at": "2026-09-20T10:00:00Z",
+  "completeness_notice": "Information may be unavailable or specially protected; absence is not confirmation of no condition."
+}
+```
+
+### Error responses
+
+`401`, `403`, `422`, `503`, `405`, `500`. A patient outside the current scope is not returned by this collection and must not be disclosed through a count or filter response.
 
 
 ## 05 · Read local domain records
@@ -3068,6 +3133,104 @@ These are the exact component schemas used by the OpenAPI file. `required` is ex
 }
 ```
 
+### PatientDirectoryEntry
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "patient_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "health_id": {
+      "type": "string",
+      "pattern": "^RSH-[0-9a-f-]{36}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "date_of_birth": {
+      "type": "string",
+      "format": "date"
+    },
+    "local_patient_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "organization": {
+      "$ref": "#/components/schemas/Source"
+    },
+    "latest_encounter_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "patient_id",
+    "health_id",
+    "name",
+    "date_of_birth",
+    "local_patient_id",
+    "organization",
+    "latest_encounter_at"
+  ]
+}
+```
+
+### PatientDirectoryCollection
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/components/schemas/PatientDirectoryEntry"
+      },
+      "maxItems": 100
+    },
+    "next_cursor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "retrieved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completeness_notice": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400
+    }
+  },
+  "required": [
+    "items",
+    "next_cursor",
+    "correlation_id",
+    "retrieved_at",
+    "completeness_notice"
+  ]
+}
+```
+
 ### Error
 
 ```json
@@ -3385,6 +3548,18 @@ These are the exact component schemas used by the OpenAPI file. `required` is ex
         }
       ]
     },
+    "security_stream_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Server-derived authorized audit stream. Null when the current context cannot read a security stream; clients must not infer this value."
+    },
     "permissions_summary": {
       "type": "array",
       "items": {
@@ -3425,6 +3600,7 @@ These are the exact component schemas used by the OpenAPI file. `required` is ex
     "organization",
     "patient_id",
     "shift",
+    "security_stream_id",
     "permissions_summary",
     "csrf_token",
     "idle_expires_at",
@@ -8158,4 +8334,3 @@ These are the exact component schemas used by the OpenAPI file. `required` is ex
 ## Source and change record
 
 Derived from the delivered RecordShield PRD and Architecture v1.0 (19 September 2026), particularly sections 3, 6–13 and 16. This is a new API detail artifact, not a revision of the original PDF. Contract defaults identified above close missing transport details; product permissions and future-production exclusions remain unchanged. No external API, legal or interoperability conformance claim is made.
-

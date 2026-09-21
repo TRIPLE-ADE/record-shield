@@ -31,9 +31,8 @@ test("renders workspace context from the authenticated session", async () => {
     </QueryProvider>,
   );
 
-  await expect
-    .element(page.getByRole("heading", { level: 1, name: /Good to see you/ }))
-    .toBeVisible();
-  await expect.element(page.getByText("Unity Medical")).toBeVisible();
-  await expect.element(page.getByText("Emergency Doctor")).toBeVisible();
+  await expect.element(page.getByRole("heading", { level: 1, name: "Home" })).toBeVisible();
+  await expect.element(page.getByText("Unity Medical / Emergency Doctor")).toBeVisible();
+  await expect.element(page.getByText("Assigned patients")).toBeVisible();
+  await expect.element(page.getByText("Musa Ibrahim")).toBeVisible();
 });

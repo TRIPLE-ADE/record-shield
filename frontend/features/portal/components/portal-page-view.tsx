@@ -59,8 +59,7 @@ export function PortalPageView({ data, onLogout, isLoggingOut }: PortalPageViewP
             Review who can access your records.
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Each request names the practitioner, source, reason, domains, and duration. You choose
-            the exact scope.
+            Choose which records to share, who can see them, and how long access lasts.
           </p>
         </section>
 
@@ -73,7 +72,8 @@ export function PortalPageView({ data, onLogout, isLoggingOut }: PortalPageViewP
                   Pending requests
                 </CardTitle>
                 <CardDescription>
-                  Nothing is shared until you approve a selected scope.
+                  Approve only the records you want to share. Emergency access is handled separately
+                  and appears in your access history.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 px-5 pb-6 sm:px-6">
@@ -99,7 +99,8 @@ export function PortalPageView({ data, onLogout, isLoggingOut }: PortalPageViewP
                   Active access
                 </CardTitle>
                 <CardDescription>
-                  Revoke a grant at any time. It takes effect before the next protected read.
+                  Stop future access at any time. Records already viewed remain in your access
+                  history.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 px-5 pb-5 sm:px-6">
@@ -111,8 +112,8 @@ export function PortalPageView({ data, onLogout, isLoggingOut }: PortalPageViewP
                 {!data.grants.items.some((grant) => grant.status === "ACTIVE") ? (
                   <PortalState
                     compact
-                    title="No active grants"
-                    description="Approved access will be listed here with its server expiry."
+                    title="No active sharing permissions"
+                    description="Approved access will appear here with its expiry time."
                   />
                 ) : null}
               </CardContent>
@@ -150,7 +151,7 @@ export function PortalPageView({ data, onLogout, isLoggingOut }: PortalPageViewP
                   <ClockIcon aria-hidden="true" className="size-4 text-primary" />
                   Access history
                 </CardTitle>
-                <CardDescription>Metadata about completed disclosures.</CardDescription>
+                <CardDescription>See who viewed your records and when.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 px-5 pb-5">
                 {data.access.items.map((event) => (

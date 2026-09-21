@@ -30,7 +30,7 @@ test("activates a bounded summary before offering explicit expansion", async () 
   );
 
   await expect
-    .element(page.getByRole("heading", { level: 1, name: "Activate a bounded patient summary" }))
+    .element(page.getByRole("heading", { level: 1, name: "Open an emergency patient summary" }))
     .toBeVisible();
   await userEvent.selectOptions(
     page.getByRole("combobox", { name: "Source facility" }),
@@ -40,8 +40,10 @@ test("activates a bounded summary before offering explicit expansion", async () 
   await userEvent.click(page.getByRole("button", { name: "Activate emergency summary" }));
 
   await expect
-    .element(page.getByRole("heading", { name: "Bounded clinical summary" }))
+    .element(page.getByRole("heading", { name: "Emergency patient summary" }))
     .toBeVisible();
   await expect.element(page.getByText(/Penicillin — Rash; moderate; active/)).toBeVisible();
-  await expect.element(page.getByRole("button", { name: "Choose Level 2 domains" })).toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: "Choose additional records" }))
+    .toBeVisible();
 });

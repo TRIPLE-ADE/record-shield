@@ -6,6 +6,7 @@ export function RequestStatus({ status }: { status: string }) {
     APPROVED: "border-success/25 bg-success/10 text-success",
     DENIED: "border-destructive/25 bg-destructive/10 text-destructive",
     CANCELLED: "border-border bg-muted text-muted-foreground",
+    REVOKED: "border-border bg-muted text-muted-foreground",
     EXPIRED: "border-border bg-muted text-muted-foreground",
   };
   return (

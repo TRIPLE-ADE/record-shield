@@ -22,7 +22,9 @@ test("offers configured identities without implying client-side authority", asyn
 
   await expect
     .element(page.getByRole("heading", { level: 1 }))
-    .toHaveTextContent("Start with the person, then the permission.");
+    .toHaveTextContent("The right records.At the point of care.");
+  await userEvent.click(page.getByText("Explore with a sample account"));
+  await userEvent.click(page.getByRole("button", { name: /Amina Yusuf/ }));
   await expect
     .element(page.getByRole("button", { name: /Amina Yusuf/ }))
     .toHaveAttribute("aria-pressed", "true");
@@ -30,6 +32,6 @@ test("offers configured identities without implying client-side authority", asyn
   await userEvent.click(page.getByRole("button", { name: /Kunle Adeyemi/ }));
   await expect.element(page.getByRole("textbox", { name: "Username" })).toHaveValue("kunle.mercy");
   await expect
-    .element(page.getByText(/The selected card never grants a role or hospital/))
+    .element(page.getByText(/Choose a role to explore with synthetic patient records/))
     .toBeVisible();
 });

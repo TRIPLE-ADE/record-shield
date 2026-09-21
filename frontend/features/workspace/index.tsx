@@ -1,11 +1,13 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { redirect, useRouter } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { useSession } from "@/hooks/auth";
 import { WorkspaceLoading, WorkspaceOverview, WorkspaceUnavailable } from "./components";
 
 export default function WorkspacePage() {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const session = useSession();
 
@@ -25,11 +27,17 @@ export default function WorkspacePage() {
     );
   }
 
+  if (session.data.user.kind === "PATIENT") redirect("/portal");
+
   return (
     <WorkspaceOverview
       context={session.data}
       isFetching={session.isFetching}
-      onRefresh={() => session.refetch()}
+      onRefresh={() => {
+        void queryClient.invalidateQueries({ queryKey: ["patient-directory"] });
+        void queryClient.invalidateQueries({ queryKey: ["exchange"] });
+        void session.refetch();
+      }}
     />
   );
 }

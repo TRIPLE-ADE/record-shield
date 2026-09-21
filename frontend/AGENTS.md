@@ -13,6 +13,8 @@ This file is the working agreement for AI agents changing the frontend. Keep the
 
 The frontend uses Next.js 16 App Router, React 19, TypeScript, Tailwind CSS v4, shadcn/Radix primitives, React Query, Axios, Zod, React Hook Form, Vitest Browser Mode, and Playwright.
 
+`pnpm-workspace.yaml` enforces a seven-day minimum release age and pnpm's no-downgrade trust policy. Keep those checks enabled when changing dependencies; the existing `undici-types` and semver overrides select provenance-attested releases required by the policy.
+
 Routes are composition boundaries. Keep route files in `app/` thin and export the feature page from `features/`:
 
 ```text
@@ -20,9 +22,11 @@ next.config.ts                       -> redirect / to /login
 app/design-system/page.tsx           -> features/design-system
 app/(auth)/login/page.tsx            -> features/auth
 app/(workspace)/workspace/page.tsx   -> features/workspace
+app/(workspace)/workspace/patients/page.tsx -> features/patient-directory
 app/(workspace)/workspace/patients/[id]/page.tsx -> features/patient-records
 app/(workspace)/workspace/patients/[id]/exchange/page.tsx -> features/exchange
 app/(workspace)/workspace/patients/[id]/emergency/page.tsx -> features/emergency
+app/(workspace)/workspace/downtime/page.tsx -> features/downtime
 app/(portal)/portal/page.tsx          -> features/portal
 app/api/v1/[...path]/route.ts        -> demo HTTP transport only
 ```
@@ -36,6 +40,10 @@ hooks/
   patient-records.ts
   exchange.ts
   emergency.ts
+  security.ts
+  admin.ts
+  downtime.ts
+  patients.ts
 ```
 
 Feature folders own page composition, feature components, API functions, schemas, data, helpers, and colocated tests:
@@ -64,6 +72,11 @@ API transport helpers belong in `lib/api/`. Avoid barrel files that contain impl
 feature `components/index.ts` may only re-export the individual component modules, and a feature
 `api/index.ts` owns the feature's transport seam. The global hooks are grouped by domain and should
 only depend on feature API functions for network work.
+
+The downtime feature owns the paper-form reconciliation flow. Its public mutation is the documented
+`POST /api/v1/downtime/reconciliations` operation. Demo reset and fault controls use private
+`/demo/*` mock-only routes, are hidden when `NEXT_PUBLIC_API_URL` is configured or production is
+running, and must never become a production authorization or clinical-data path.
 
 Use `index.tsx` for feature pages. Do not create `features/<feature>/page.tsx`. The only separate test location is `e2e/`, which contains Playwright flows against the running application.
 
@@ -127,6 +140,9 @@ These decisions are accepted unless the user explicitly changes them:
 5. **Scoped chrome:** workspace navigation belongs to the workspace route group. The design-system page remains a development-only standalone component reference with no shared app shell, layout wrapper, or product navigation link.
 6. **Colocated verification:** feature tests live beside their feature; Playwright remains separate because it needs a running server.
 7. **Quality gates are repository conventions:** use Oxlint, Oxfmt, `tsgo`, Vitest Browser Mode, Playwright, and React Doctor before presenting a frontend change as complete.
+8. **Downtime is fail-closed:** source, consent, audit, malformed-source, and unresolved-transaction failures are rendered as explicit dependency states. Offline remote data is never served from a stale browser cache; a committed local write may surface `audit_sync_status=PENDING` while protected reads remain blocked.
+9. **Patient directory is a contract boundary:** workspace navigation opens a server-scoped patient collection, not a client-derived current-patient link. Directory entries are minimal identity and source context; detail routes still ask the API to authorize each patient before reading domains.
+10. **Production scope follows product requirements:** the current workspace, patient directory, protected records, exchange, emergency, security, administration, and downtime paths are the supported frontend scope. Do not add a speculative demo-only phase or route without a concrete product requirement.
 
 ## Required checks
 

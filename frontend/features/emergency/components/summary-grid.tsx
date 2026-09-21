@@ -14,7 +14,7 @@ export function SummaryGrid({ summary }: { summary: EmergencySummary }) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Level 1</p>
           <h2 id="summary-heading" className="mt-1 font-heading text-xl font-semibold">
-            Bounded clinical summary
+            Emergency patient summary
           </h2>
         </div>
         <p className="text-xs text-muted-foreground">

@@ -28,10 +28,14 @@ export default function EmergencyPage({ patientId }: EmergencyPageProps) {
   if (session.isPending || records.isPending) return <EmergencyLoading />;
   if (session.error instanceof ApiError && session.error.status === 401) redirect("/login");
   if (!context || context.patient_id !== patientId || !context.organization) {
-    return <EmergencyDenied description="The current session is not linked to this patient." />;
+    return (
+      <EmergencyDenied description="This patient is not available for record sharing through your current account." />
+    );
   }
   if (!canActivateEmergency(context)) {
-    return <EmergencyDenied description="This work context cannot activate emergency access." />;
+    return (
+      <EmergencyDenied description="Your current role or shift does not allow emergency access." />
+    );
   }
 
   const authenticatedContext = context as typeof context & {

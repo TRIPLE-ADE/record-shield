@@ -10,7 +10,6 @@ import {
   CheckCircleIcon,
   CircleNotchIcon,
   LockKeyIcon,
-  ShieldCheckIcon,
   UserCircleIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -25,12 +24,12 @@ const isMockMode = !process.env.NEXT_PUBLIC_API_URL;
 
 export function LoginForm() {
   const router = useRouter();
-  const [selectedUsername, setSelectedUsername] = useState<string>(demoIdentities[0].username);
+  const [selectedUsername, setSelectedUsername] = useState<string>("");
   const form = useForm<LoginRequest>({
     resolver: zodResolver(loginRequestSchema),
     defaultValues: {
-      username: isMockMode ? demoIdentities[0].username : "",
-      password: isMockMode ? DEMO_PASSWORD : "",
+      username: "",
+      password: "",
     },
   });
   const loginMutation = useLogin();
@@ -44,8 +43,8 @@ export function LoginForm() {
 
   const onSubmit = form.handleSubmit((values) => {
     loginMutation.mutate(values, {
-      onSuccess: () => {
-        router.push("/workspace");
+      onSuccess: (session) => {
+        router.push(session.user.kind === "PATIENT" ? "/portal" : "/workspace");
         router.refresh();
       },
     });
@@ -53,7 +52,7 @@ export function LoginForm() {
   const serverMessage = loginMutation.error?.message;
 
   return (
-    <form onSubmit={onSubmit} noValidate className="space-y-5">
+    <form method="post" onSubmit={onSubmit} noValidate className="space-y-5">
       <div className="space-y-2">
         <Label htmlFor="username">Username</Label>
         <div className="relative">
@@ -94,7 +93,7 @@ export function LoginForm() {
           />
         </div>
         {form.formState.errors.password && (
-          <p className="text-xs text-destructive">Enter the supplied demo credential.</p>
+          <p className="text-xs text-destructive">Enter your password.</p>
         )}
       </div>
 
@@ -111,30 +110,25 @@ export function LoginForm() {
         {loginMutation.isPending ? (
           <>
             <CircleNotchIcon aria-hidden="true" className="size-4 animate-spin" />
-            Verifying context
+            Signing in…
           </>
         ) : (
           <>
-            Enter workspace
+            Sign in
             <ArrowRightIcon aria-hidden="true" />
           </>
         )}
       </Button>
 
-      <div className="flex items-start gap-2.5 rounded-lg border border-border/70 bg-muted/45 px-3 py-2.5 text-xs leading-5 text-muted-foreground">
-        <ShieldCheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
-        <p>
-          Access is decided by the server context returned after sign-in. The selected card never
-          grants a role or hospital.
-        </p>
-      </div>
-
       {isMockMode ? (
-        <div className="space-y-3 border-t border-border/70 pt-5">
+        <details className="space-y-3 border-t border-border/70 pt-5">
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">
+            Explore with a sample account
+          </summary>
           <div>
-            <p className="text-sm font-medium">Quick access</p>
+            <p className="text-sm font-medium">Sample accounts</p>
             <p className="text-xs text-muted-foreground">
-              Choose a configured account to continue.
+              Choose a role to explore with synthetic patient records.
             </p>
           </div>
 
@@ -177,7 +171,7 @@ export function LoginForm() {
               );
             })}
           </div>
-        </div>
+        </details>
       ) : null}
     </form>
   );

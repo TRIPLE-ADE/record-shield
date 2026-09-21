@@ -22,7 +22,7 @@ export function EmergencyHeader({
           {patientName ?? "Patient summary"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {organizationName} · bounded source disclosure
+          {organizationName} · emergency record access
         </p>
       </div>
       {session ? (

@@ -47,7 +47,7 @@ export function JustificationCard({ session }: { session: EmergencySession }) {
         <CardDescription>
           {session.justification_status === "SUBMITTED"
             ? "A review has been recorded for this session. Add another note only if the clinical rationale changes."
-            : "Record the reason for the emergency disclosure before the review window closes."}
+            : "Explain why emergency access was needed before the review deadline."}
         </CardDescription>
       </CardHeader>
       <CardContent className="px-5 pb-5">

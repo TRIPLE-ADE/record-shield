@@ -1,10 +1,13 @@
 import type { ClinicalRecord } from "@/lib/api/contracts/records";
 
 export const DEMO_PATIENT_ID = "00000000-0000-4000-8000-000000000001";
+export const DEMO_SECOND_PATIENT_ID = "00000000-0000-4000-8000-000000000024";
 export const DEMO_MERCY_ORGANIZATION_ID = "00000000-0000-4000-8000-000000000002";
 export const DEMO_UNITY_ORGANIZATION_ID = "00000000-0000-4000-8000-000000000003";
 export const DEMO_MERCY_ENCOUNTER_ID = "00000000-0000-4000-8000-000000000006";
 export const DEMO_UNITY_ENCOUNTER_ID = "00000000-0000-4000-8000-000000000022";
+export const DEMO_SECOND_MERCY_ENCOUNTER_ID = "00000000-0000-4000-8000-000000000025";
+export const DEMO_SECOND_UNITY_ENCOUNTER_ID = "00000000-0000-4000-8000-000000000026";
 export const DEMO_MERCY_WARD_ID = "00000000-0000-4000-8000-000000000007";
 export const DEMO_UNITY_WARD_ID = "00000000-0000-4000-8000-000000000023";
 
@@ -23,6 +26,7 @@ const source = {
 
 function createRecord(
   input: Pick<ClinicalRecord, "id" | "domain" | "subtype" | "sensitivity" | "payload"> & {
+    patientId?: string;
     organization: "mercy" | "unity";
     localPatientId: string;
     encounterId: string;
@@ -34,7 +38,7 @@ function createRecord(
   return {
     id: input.id,
     version_id: `${input.id.slice(0, -12)}9${input.id.slice(-11)}`,
-    patient_id: DEMO_PATIENT_ID,
+    patient_id: input.patientId ?? DEMO_PATIENT_ID,
     encounter_id: input.encounterId,
     domain: input.domain,
     subtype: input.subtype,
@@ -250,6 +254,80 @@ export function createSeedRecords(now: Date): ClinicalRecord[] {
         severity: "moderate",
         status: "active",
       },
+    }),
+    createRecord({
+      id: "00000000-0000-4000-8000-000000000301",
+      patientId: DEMO_SECOND_PATIENT_ID,
+      organization: "mercy",
+      localPatientId: "PAT-00304",
+      encounterId: DEMO_SECOND_MERCY_ENCOUNTER_ID,
+      authorId: "00000000-0000-4000-8000-000000000008",
+      domain: "demographics",
+      subtype: "demographics",
+      sensitivity: "STANDARD",
+      observedAt: olderObservedAt,
+      payload: {
+        name: "Ada Nwosu",
+        date_of_birth: "1992-11-08",
+        gender: "female",
+        contact: "+234 802 555 0144",
+        address: "8 Marina View, Lagos",
+        next_of_kin: {
+          name: "Chidi Nwosu",
+          relationship: "Sibling",
+          contact: "+234 802 555 0145",
+        },
+      },
+    }),
+    createRecord({
+      id: "00000000-0000-4000-8000-000000000302",
+      patientId: DEMO_SECOND_PATIENT_ID,
+      organization: "mercy",
+      localPatientId: "PAT-00304",
+      encounterId: DEMO_SECOND_MERCY_ENCOUNTER_ID,
+      authorId: "00000000-0000-4000-8000-000000000008",
+      domain: "administration",
+      subtype: "administration",
+      sensitivity: "STANDARD",
+      observedAt,
+      payload: { ward_id: DEMO_MERCY_WARD_ID, bed: "C-07" },
+    }),
+    createRecord({
+      id: "00000000-0000-4000-8000-000000000401",
+      patientId: DEMO_SECOND_PATIENT_ID,
+      organization: "unity",
+      localPatientId: "HSP-99211",
+      encounterId: DEMO_SECOND_UNITY_ENCOUNTER_ID,
+      authorId: "00000000-0000-4000-8000-000000000006",
+      domain: "demographics",
+      subtype: "demographics",
+      sensitivity: "STANDARD",
+      observedAt: olderObservedAt,
+      payload: {
+        name: "Ada Nwosu",
+        date_of_birth: "1992-11-08",
+        gender: "female",
+        contact: "+234 802 555 0144",
+        address: "8 Marina View, Lagos",
+        next_of_kin: {
+          name: "Chidi Nwosu",
+          relationship: "Sibling",
+          contact: "+234 802 555 0145",
+        },
+      },
+    }),
+    createRecord({
+      id: "00000000-0000-4000-8000-000000000402",
+      patientId: DEMO_SECOND_PATIENT_ID,
+      organization: "unity",
+      localPatientId: "HSP-99211",
+      encounterId: DEMO_SECOND_UNITY_ENCOUNTER_ID,
+      authorId: "00000000-0000-4000-8000-000000000006",
+      domain: "vitals",
+      subtype: "vital",
+      sensitivity: "SENSITIVE",
+      observedAt,
+      payload: { name: "Heart rate", value: 76, unit: "bpm" },
     }),
   ];
 }

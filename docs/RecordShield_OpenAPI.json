@@ -158,6 +158,7 @@
                     "ends_at": "2026-09-20T16:00:00Z",
                     "active": true
                   },
+                  "security_stream_id": null,
                   "permissions_summary": [
                     "local_records.read_with_context",
                     "consent.request",
@@ -377,6 +378,7 @@
                     "ends_at": "2026-09-20T16:00:00Z",
                     "active": true
                   },
+                  "security_stream_id": null,
                   "permissions_summary": [
                     "local_records.read_with_context",
                     "consent.request",
@@ -398,6 +400,100 @@
           },
           "404": {
             "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "405": {
+            "$ref": "#/components/responses/Error405"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/patients": {
+      "get": {
+        "operationId": "GET_patients",
+        "summary": "List assigned patients",
+        "tags": [
+          "patients"
+        ],
+        "description": "Authorized caller: local staff with an active care, task or ward context. The server derives the directory from the authenticated session and applies authorization before pagination. The client cannot widen access by supplying an organization, practitioner or patient filter. Return only minimum identity and local source context; do not disclose record counts, restricted-domain presence or hidden totals.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "description": "Opaque cursor bound to actor, scope and ordering."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "description": "Maximum number of authorized entries to return."
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Trimmed case-insensitive substring of name, health ID or local patient ID; searches only the authorized collection before pagination. Cursors are bound to actor, scope, normalized search and limit. Invalid, expired or mismatched cursors return 422. No hidden counts or global discovery.",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized patient directory page.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientDirectoryCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
           },
           "422": {
             "$ref": "#/components/responses/Error422"
@@ -5279,6 +5375,94 @@
           "date_of_birth": "1990-04-12"
         }
       },
+      "PatientDirectoryEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "patient_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "health_id": {
+            "type": "string",
+            "pattern": "^RSH-[0-9a-f-]{36}$"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "date_of_birth": {
+            "type": "string",
+            "format": "date"
+          },
+          "local_patient_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "organization": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "latest_encounter_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "patient_id",
+          "health_id",
+          "name",
+          "date_of_birth",
+          "local_patient_id",
+          "organization",
+          "latest_encounter_at"
+        ]
+      },
+      "PatientDirectoryCollection": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatientDirectoryEntry"
+            },
+            "maxItems": 100
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "correlation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "retrieved_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completeness_notice": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "correlation_id",
+          "retrieved_at",
+          "completeness_notice"
+        ]
+      },
       "Error": {
         "type": "object",
         "additionalProperties": false,
@@ -5602,6 +5786,18 @@
               }
             ]
           },
+          "security_stream_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Server-derived authorized audit stream. Null when the current context cannot read a security stream; clients must not infer this value."
+          },
           "permissions_summary": {
             "type": "array",
             "items": {
@@ -5642,6 +5838,7 @@
           "organization",
           "patient_id",
           "shift",
+          "security_stream_id",
           "permissions_summary",
           "csrf_token",
           "idle_expires_at",
@@ -5668,6 +5865,7 @@
             "ends_at": "2026-09-20T16:00:00Z",
             "active": true
           },
+          "security_stream_id": null,
           "permissions_summary": [
             "local_records.read_with_context",
             "consent.request",

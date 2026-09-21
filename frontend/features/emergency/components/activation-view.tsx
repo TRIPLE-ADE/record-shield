@@ -42,7 +42,7 @@ export function ActivationView({
             Emergency access
           </p>
           <h1 className="mt-2 font-heading text-3xl font-semibold tracking-tight">
-            Activate a bounded patient summary
+            Open an emergency patient summary
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
             Use the smallest safe view for the immediate decision. This session is visible to the
@@ -55,7 +55,7 @@ export function ActivationView({
           <CardHeader className="px-5 py-5 sm:px-6">
             <CardTitle className="flex items-center gap-2 text-lg">
               <SirenIcon aria-hidden="true" className="size-5 text-emergency" weight="duotone" />
-              Confirm the receiving context
+              Confirm the patient and hospital
             </CardTitle>
             <CardDescription>
               Every field is bound to the active patient, facility, and encounter.

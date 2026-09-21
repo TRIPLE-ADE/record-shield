@@ -24,7 +24,7 @@ export function ExchangeHeader({
         </Link>
         <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/7 px-3 py-1.5 text-xs font-medium text-primary">
           <LinkSimpleIcon aria-hidden="true" className="size-3.5" />
-          Verified source exchange
+          Records from other hospitals
         </span>
       </div>
       <section className="flex flex-col justify-between gap-5 border-b border-border/70 pb-7 sm:flex-row sm:items-end">
@@ -33,7 +33,7 @@ export function ExchangeHeader({
             Patient access
           </p>
           <h1 className="mt-2 font-heading text-3xl font-semibold tracking-tight">
-            Request source records
+            Request records
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
             Ask the patient to approve an exact, time-limited set of records for{" "}
@@ -41,7 +41,7 @@ export function ExchangeHeader({
           </p>
         </div>
         <div className="rounded-xl border border-border/70 bg-card/70 px-4 py-3 text-right">
-          <p className="text-xs text-muted-foreground">Receiving context</p>
+          <p className="text-xs text-muted-foreground">Your hospital</p>
           <p className="mt-1 text-sm font-medium">{organizationName}</p>
         </div>
       </section>
