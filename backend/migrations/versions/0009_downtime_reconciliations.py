@@ -12,7 +12,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    Base.metadata.create_all(bind=op.get_bind(), tables=[Base.metadata.tables["downtime_reconciliations"]])
+    Base.metadata.create_all(
+        bind=op.get_bind(), tables=[Base.metadata.tables["downtime_reconciliations"]]
+    )
 
 
 def downgrade() -> None:

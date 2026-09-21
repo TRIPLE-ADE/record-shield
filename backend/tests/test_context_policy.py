@@ -39,6 +39,7 @@ def _context(
         role=role,
         organization_id=ORG,
         shift_active=shift,
+        ward_ids=frozenset({ward}) if care else frozenset(),
         care_patient_ids=frozenset({PATIENT}) if care else frozenset(),
         care_ward_ids_by_patient={PATIENT: frozenset({ward})} if care else {},
         sensitive_patient_ids=frozenset({PATIENT}) if sensitive else frozenset(),

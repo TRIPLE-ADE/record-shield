@@ -206,13 +206,15 @@ async def _require_local_patient(
 
 
 async def _validate_assignment_payload(
-    db: AsyncSession, organization_id: UUID, payload: AssignmentUpsert
+    db: AsyncSession, organization_id: UUID, payload: AssignmentUpsert, actor_membership_id: UUID
 ) -> None:
     data = payload.data
     starts_at = _parse_z(data.starts_at)
     ends_at = _parse_z(data.ends_at)
     if starts_at >= ends_at:
         raise ApiError(422, "VALIDATION_ERROR", "starts_at must be before ends_at.")
+    if data.membership_id == actor_membership_id:
+        raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
     await _require_local_membership(db, organization_id, data.membership_id)
     if payload.kind == "WARD":
         await _require_local_ward(db, organization_id, data.ward_id)
@@ -231,6 +233,7 @@ async def _validate_assignment_payload(
                 or record.organization_id != organization_id
                 or record.domain != "investigations"
                 or record.subtype != "request"
+                or (data.patient_id is not None and record.patient_id != data.patient_id)
             ):
                 raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
         elif data.resource_id is not None:
@@ -285,7 +288,7 @@ async def upsert_context_assignment(
         if row is None:
             raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
         return await _assignment_view(db, row, payload.kind, correlation_id), existing.status_code
-    await _validate_assignment_payload(db, membership.organization_id, payload)
+    await _validate_assignment_payload(db, membership.organization_id, payload, membership.id)
     model = ASSIGNMENT_MODELS[payload.kind]
     status_code = 201
     if hasattr(payload, "assignment_id"):

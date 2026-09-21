@@ -113,7 +113,7 @@ NARRATIVE = "Patient unconscious on arrival; source history needed for immediate
 
 
 def _ctx(role: str, shift: bool = True) -> ActorContext:
-    return ActorContext(role, UNITY_ID, shift, frozenset(), {}, frozenset(), {})
+    return ActorContext(role, UNITY_ID, shift, frozenset(), frozenset(), {}, frozenset(), {})
 
 
 def _policy(**overrides) -> EmergencyPolicy:

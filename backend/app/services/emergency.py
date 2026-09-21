@@ -48,7 +48,7 @@ from app.schemas.records import NormalizedRecord, RecordCollection, SourceView
 from app.services import audit
 from app.services.context import emergency_policy, load_context
 from app.services.emergency_summary import SUMMARY_DOMAINS, build_summary, releasable_at_level_1
-from app.services.exchange import _settle, source_policy
+from app.services.exchange import _settle, require_verified_organization, source_policy
 from app.services.local_workspace import _idempotency, _require_key, record_view
 from app.services.policy import (
     DOCTOR_ROLES,
@@ -461,6 +461,11 @@ async def _recheck_release(db: AsyncSession, actor: Actor, session: EmergencySes
     organization = await db.get(Organization, membership.organization_id)
     if organization is None or organization.status == "SUSPENDED":
         raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
+    if session.source_org_id != session.recipient_org_id:
+        await require_verified_organization(
+            db, actor, session.source_org_id, "emergency_session", session.id,
+            "emergency_release", fresh=True,
+        )
     context = await load_context(db, membership, fresh=True)
     receiving = emergency_policy(await source_policy(db, session.recipient_org_id, fresh=True))
     source = emergency_policy(await source_policy(db, session.source_org_id, fresh=True))
@@ -794,6 +799,9 @@ async def activate(
         )
         if link is None or payload.source_org_id not in source_adapters:
             raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+        await require_verified_organization(
+            db, actor, payload.source_org_id, "patient", payload.patient_id, "emergency_activate"
+        )
     receiving_row = await source_policy(db, recipient_org_id)
     source_row = await source_policy(db, payload.source_org_id)
     decision = evaluate_emergency_eligibility(

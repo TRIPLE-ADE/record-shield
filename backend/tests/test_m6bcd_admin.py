@@ -375,3 +375,148 @@ async def test_downtime_reconciliation_create_replay_and_duplicate_conflict(data
     finally:
         await amina.aclose()
         await sarah.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ac28_suspended_source_organization_blocks_normal_and_emergency_exchange(
+    database,
+) -> None:
+    from sqlalchemy import select
+
+    from app.models import AuditEvent, SecurityAlert
+
+    amina, amina_csrf = await _client("amina.unity", "ac28-amina")
+    musa, musa_csrf = await _client("musa.patient", "ac28-musa")
+    trust, trust_csrf = await _client("trust.operator", "ac28-trust")
+    try:
+        encounter = (
+            await amina.post(
+                "/api/v1/encounters",
+                json={
+                    "patient_id": str(PATIENT_ID),
+                    "type": "ROUTINE",
+                    "ward_id": str(UNITY_ED_ID),
+                },
+                headers=_headers(amina_csrf, "ac28-enc"),
+            )
+        ).json()["encounter"]["id"]
+        emergency = (
+            await amina.post(
+                "/api/v1/encounters",
+                json={
+                    "patient_id": str(PATIENT_ID),
+                    "type": "EMERGENCY",
+                    "ward_id": str(UNITY_ED_ID),
+                },
+                headers=_headers(amina_csrf, "ac28-enc-e"),
+            )
+        ).json()["encounter"]["id"]
+        request = await amina.post(
+            "/api/v1/consent/requests",
+            json={
+                "patient_id": str(PATIENT_ID),
+                "source_org_id": str(MERCY_ID),
+                "receiving_encounter_id": encounter,
+                "purpose": "treatment",
+                "requested_domains": ["allergies"],
+                "reason": "Allergy check before treatment planning today.",
+            },
+            headers=_headers(amina_csrf, "ac28-req"),
+        )
+        assert request.status_code == 201, request.text
+        grant = (
+            await musa.post(
+                f"/api/v1/consent/requests/{request.json()['request']['id']}/approve",
+                json={"selected_domains": ["allergies"], "duration": "PT1H",
+                      "expected_version": 1},
+                headers=_headers(musa_csrf, "ac28-approve"),
+            )
+        ).json()["grant"]
+        read_params = {"source_id": str(MERCY_ID), "grant_id": grant["id"],
+                       "domains": ["allergies"]}
+        before = await amina.get(
+            f"/api/v1/exchange/patients/{PATIENT_ID}/records", params=read_params
+        )
+        assert before.status_code == 200, before.text
+
+        suspended = await trust.post(
+            "/api/v1/admin/suspensions",
+            json={
+                "target_type": "ORGANIZATION",
+                "target_id": str(MERCY_ID),
+                "reason": "Trust operator suspends Mercy for the synthetic AC28 check.",
+                "expected_version": 1,
+            },
+            headers=_headers(trust_csrf, "ac28-suspend"),
+        )
+        assert suspended.status_code == 200, suspended.text
+
+        existing_grant = await amina.get(
+            f"/api/v1/exchange/patients/{PATIENT_ID}/records", params=read_params
+        )
+        assert existing_grant.status_code == 403, existing_grant.text
+        assert "items" not in existing_grant.json()
+
+        new_request = await amina.post(
+            "/api/v1/consent/requests",
+            json={
+                "patient_id": str(PATIENT_ID),
+                "source_org_id": str(MERCY_ID),
+                "receiving_encounter_id": encounter,
+                "purpose": "treatment",
+                "requested_domains": ["medications"],
+                "reason": "Medication review after the source was suspended.",
+            },
+            headers=_headers(amina_csrf, "ac28-req-2"),
+        )
+        assert new_request.status_code == 403
+
+        activation = await amina.post(
+            "/api/v1/emergency/sessions",
+            json={
+                "patient_id": str(PATIENT_ID),
+                "source_org_id": str(MERCY_ID),
+                "receiving_encounter_id": emergency,
+                "reason_code": "UNCONSCIOUS",
+                "necessity_confirmed": True,
+            },
+            headers=_headers(amina_csrf, "ac28-activate"),
+        )
+        assert activation.status_code == 403, activation.text
+        assert "summary" not in activation.json()
+
+        discovery = await amina.get(
+            f"/api/v1/exchange/patients/{PATIENT_ID}/sources",
+            params={"receiving_encounter_id": encounter},
+        )
+        assert discovery.status_code == 200
+        assert discovery.json()["items"] == []
+
+        same_hospital = await amina.post(
+            "/api/v1/emergency/sessions",
+            json={
+                "patient_id": str(PATIENT_ID),
+                "source_org_id": str(UNITY_ID),
+                "receiving_encounter_id": emergency,
+                "reason_code": "UNCONSCIOUS",
+                "necessity_confirmed": True,
+            },
+            headers=_headers(amina_csrf, "ac28-activate-local"),
+        )
+        assert same_hospital.status_code == 201, same_hospital.text
+    finally:
+        await amina.aclose()
+        await musa.aclose()
+        await trust.aclose()
+
+    async with database() as db:
+        reasons = (
+            await db.scalars(
+                select(AuditEvent.reason_code).where(AuditEvent.action == "ACCESS_DENIED")
+            )
+        ).all()
+        alerts = (
+            await db.scalars(select(SecurityAlert.rule_id).where(SecurityAlert.rule_id == "AR09"))
+        ).all()
+    assert reasons.count("ORG_SUSPENDED") >= 3
+    assert len(alerts) >= 3

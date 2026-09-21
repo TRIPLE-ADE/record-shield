@@ -125,6 +125,37 @@ def _rate_limit_discovery(user_id: UUID) -> None:
         _discovery_calls[user_id] = calls
 
 
+async def require_verified_organization(
+    db: AsyncSession,
+    actor: Actor,
+    organization_id: UUID,
+    resource_type: str,
+    resource_id: UUID,
+    operation: str,
+    fresh: bool = False,
+) -> Organization:
+    """Contract §32 / AC28: a suspended organization is refused as source or recipient on the
+    next request and at the final release check. The denial is evidence (AR09)."""
+    organization = await db.get(Organization, organization_id)
+    if organization is not None and fresh:
+        await db.refresh(organization)
+    if organization is None:
+        raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+    if organization.status == "SUSPENDED":
+        await audit.deny(
+            db,
+            actor.user.id,
+            actor.organization_id if actor.membership else None,
+            "ORG_SUSPENDED",
+            resource_type,
+            resource_id,
+            {"operation": operation, "suspended_organization_id": str(organization_id)},
+            stream=audit.EXCHANGE_STREAM,
+            role_snapshot=actor.membership.role if actor.membership else None,
+        )
+    return organization
+
+
 async def source_policy(
     db: AsyncSession, organization_id: UUID, fresh: bool = False
 ) -> HospitalPolicy:
@@ -395,7 +426,7 @@ async def discover_sources(
     )
     items: list[tuple[Organization, str]] = []
     for _link, organization in rows.all():
-        if organization.id == recipient_org_id:
+        if organization.id == recipient_org_id or organization.status == "SUSPENDED":
             continue
         adapter = source_adapters.get(organization.id)
         if _link.availability != "AVAILABLE":
@@ -439,6 +470,9 @@ async def create_consent_request(
     )
     if source_link is None or encounter is None or payload.source_org_id not in source_adapters:
         raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+    await require_verified_organization(
+        db, actor, payload.source_org_id, "patient", payload.patient_id, "consent_request"
+    )
     await _require_treatment_context(db, actor, payload.patient_id, encounter.ward_id)
     await _require_request_ceiling(
         db,
@@ -1003,6 +1037,9 @@ async def read_remote_records(
     adapter = source_adapters.get(source_id)
     if link is None or link.availability != "AVAILABLE" or adapter is None:
         raise ApiError(503, "SOURCE_UNAVAILABLE", "The source system is unavailable.")
+    await require_verified_organization(
+        db, actor, source_id, "consent_grant", grant.id, "remote_read"
+    )
     request = await db.get(ConsentRequest, grant.request_id)
     encounter = await db.get(Encounter, request.receiving_encounter_id) if request else None
     if encounter is None or encounter.status != "OPEN":
@@ -1148,6 +1185,13 @@ async def read_remote_records(
     if organization is None or organization.status == "SUSPENDED":
         await _settle(db, transaction, "DENIED")
         raise ApiError(403, "FORBIDDEN", "This operation is not permitted.")
+    try:
+        await require_verified_organization(
+            db, actor, source_id, "consent_grant", grant.id, "remote_release", fresh=True
+        )
+    except ApiError:
+        await _settle(db, transaction, "DENIED")
+        raise
 
     retrieved_at = _now()
     # PRD §10.3 step 6: source and recipient release authorizations are durable before the
