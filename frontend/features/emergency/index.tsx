@@ -2,10 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
-import { getPatientName } from "@/utils/clinical-records";
 import { useSession } from "@/hooks/auth";
-import { useDiscoverSources } from "@/hooks/exchange";
-import { useLocalRecords } from "@/hooks/patient-records";
+import { usePatientContext } from "@/hooks/patients";
 import { EmergencyDenied, EmergencyLoading, EmergencyWorkspace } from "./components";
 import { canActivateEmergency } from "@/utils/authorization";
 import type { EmergencyPageProps } from "./types";
@@ -13,21 +11,10 @@ import type { EmergencyPageProps } from "./types";
 export default function EmergencyPage({ patientId }: EmergencyPageProps) {
   const session = useSession();
   const context = session.data;
-  const records = useLocalRecords(patientId, "demographics", "treatment", {
-    enabled: Boolean(context?.organization && context.patient_id === patientId),
-  });
-  const encounterId = records.data?.items[0]?.encounter_id ?? "";
-  const sources = useDiscoverSources(
-    patientId,
-    encounterId,
-    Boolean(encounterId),
-    "emergency_treatment",
-  );
-  const patientName = getPatientName(records.data?.items[0]);
-
-  if (session.isPending || records.isPending) return <EmergencyLoading />;
+  const patient = usePatientContext(patientId, Boolean(context?.organization));
+  if (session.isPending) return <EmergencyLoading />;
   if (session.error instanceof ApiError && session.error.status === 401) redirect("/login");
-  if (!context || context.patient_id !== patientId || !context.organization) {
+  if (!context || !context.organization) {
     return (
       <EmergencyDenied description="This patient is not available for record sharing through your current account." />
     );
@@ -38,6 +25,12 @@ export default function EmergencyPage({ patientId }: EmergencyPageProps) {
     );
   }
 
+  if (patient.isPending) return <EmergencyLoading />;
+  if (patient.error || !patient.data?.can_activate_emergency)
+    return (
+      <EmergencyDenied description="An open emergency visit and permission to care for this patient are required." />
+    );
+
   const authenticatedContext = context as typeof context & {
     organization: NonNullable<typeof context.organization>;
   };
@@ -45,11 +38,10 @@ export default function EmergencyPage({ patientId }: EmergencyPageProps) {
   return (
     <EmergencyWorkspace
       patientId={patientId}
-      patientName={patientName}
+      patientName={patient.data.patient.name}
       organizationName={context.organization.name}
-      encounterId={encounterId}
+      encounters={patient.data.encounters.filter((item) => item.type === "EMERGENCY")}
       sessionContext={authenticatedContext}
-      sources={sources.data?.items ?? []}
     />
   );
 }

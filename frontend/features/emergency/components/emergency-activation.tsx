@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { emergencyActivateSchema } from "@/lib/api/contracts/emergency";
 import { useActivateEmergency } from "@/hooks/emergency";
 import { emergencyActivationFormSchema, type EmergencyActivateFormValues } from "../schemas";
-import type { EmergencyWorkspaceProps } from "../types";
+import type { EmergencyActivationProps } from "../types";
 import { getEmergencyErrorMessage } from "../utils/format";
 import { ActivationView } from "./activation-view";
 
@@ -18,7 +18,7 @@ export function EmergencyActivation({
   sessionContext,
   sources,
   onActivated,
-}: EmergencyWorkspaceProps & { onActivated: (sessionId: string) => void }) {
+}: EmergencyActivationProps & { onActivated: (sessionId: string) => void }) {
   const selectedSourceId = sources[0]?.organization.organization_id ?? "";
   const activate = useActivateEmergency();
   const activationForm = useForm<EmergencyActivateFormValues>({

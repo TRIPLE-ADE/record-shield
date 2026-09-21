@@ -1,3 +1,4 @@
+import { worklistSchema, type WorklistItem } from "@/lib/api/contracts/worklist";
 import {
   csrfResponseSchema,
   loginRequestSchema,
@@ -89,6 +90,7 @@ import {
 } from "@/lib/api/contracts/downtime";
 import {
   patientDirectoryCollectionSchema,
+  patientContextSchema,
   type PatientDirectoryEntry,
 } from "@/lib/api/contracts/patients";
 import {
@@ -291,7 +293,7 @@ export class MockAuthService {
   private recordHistory = new Map<string, ClinicalRecord[]>();
   private consentRequests: ConsentRequest[] = [];
   private consentGrants: ConsentGrant[] = [];
-  private accessEvents: AccessMetadata[] = [];
+  private accessEvents: (AccessMetadata & { patient_id: string })[] = [];
   private notifications: Notification[] = [];
   private emergencySessions: EmergencySession[] = [];
   private emergencyJustifications: Array<{
@@ -554,6 +556,15 @@ export class MockAuthService {
       return this.handleRemoteRecords(request, now, remoteMatch[1]);
     }
 
+    if (path === "/worklist" && request.method === "GET") return this.handleWorklist(request, now);
+    const patientContext = path.match(/^\/patients\/([^/]+)\/context$/);
+    if (patientContext && request.method === "GET") {
+      return this.handlePatientContext(request, now, patientContext[1]);
+    }
+    const notificationRead = path.match(/^\/portal\/notifications\/([^/]+)\/read$/);
+    if (notificationRead && request.method === "POST") {
+      return this.handleReadNotification(request, now, notificationRead[1]);
+    }
     if (path === "/portal" && request.method === "GET") {
       return this.handlePortal(request, now);
     }
@@ -1601,7 +1612,7 @@ export class MockAuthService {
       identity.membershipId === null ||
       !identity.organization ||
       !this.isExchangePractitioner(identity) ||
-      identity.patientId !== patientId
+      !this.canAccessLocalPatient(identity, patientId)
     ) {
       return genericError(403, "POLICY_DENIED", "This context cannot discover remote sources.");
     }
@@ -1627,7 +1638,14 @@ export class MockAuthService {
       return genericError(404, "NOT_FOUND", "The requested patient was not found.");
     }
 
-    const remoteSource = this.sourceFor(DEMO_MERCY_ORGANIZATION_ID);
+    const linkedRecord = this.records.find(
+      (record) =>
+        record.patient_id === patientId &&
+        record.source.organization_id !== identity.organization?.organization_id,
+    );
+    const remoteSource = linkedRecord
+      ? this.sourceFor(linkedRecord.source.organization_id)
+      : undefined;
     if (!remoteSource || remoteSource.organization_id === identity.organization.organization_id) {
       return genericError(503, "SOURCE_UNAVAILABLE", "The remote source is unavailable.");
     }
@@ -1668,8 +1686,7 @@ export class MockAuthService {
     if (replay) return replay;
     if (
       !identity.organization ||
-      identity.patientId !== body.patient_id ||
-      identity.organization.organization_id !== DEMO_UNITY_ORGANIZATION_ID ||
+      !this.canAccessLocalPatient(identity, body.patient_id) ||
       new Set(body.requested_domains).size !== body.requested_domains.length ||
       body.requested_domains.some((domain) => ["mental_health", "hiv", "genetic"].includes(domain))
     ) {
@@ -1690,6 +1707,26 @@ export class MockAuthService {
     const source = this.sourceFor(body.source_org_id);
     if (!encounter || !source || source.organization_id === identity.organization.organization_id) {
       return genericError(404, "NOT_FOUND", "The requested patient or source was not found.");
+    }
+    if (
+      !this.records.some(
+        (record) =>
+          record.patient_id === body.patient_id &&
+          record.source.organization_id === body.source_org_id,
+      )
+    ) {
+      return genericError(404, "NOT_FOUND", "The requested patient or source was not found.");
+    }
+    if (
+      !mockIdentities.some(
+        (entry) => entry.user.kind === "PATIENT" && entry.patientId === body.patient_id,
+      )
+    ) {
+      return genericError(
+        409,
+        "CONSENT_CHANNEL_UNAVAILABLE",
+        "The patient has not connected a consent account. Use your organisation’s approved process to arrange consent.",
+      );
     }
     const recipient = identity.organization;
     const createdAt = serializeDate(now);
@@ -1984,7 +2021,7 @@ export class MockAuthService {
         "This work context cannot activate an emergency session.",
       );
     }
-    if (body.patient_id !== identity.patientId || !identity.organization) {
+    if (!this.canAccessLocalPatient(identity, body.patient_id) || !identity.organization) {
       return genericError(404, "NOT_FOUND", "The requested patient was not found.");
     }
     const source = this.sourceFor(body.source_org_id);
@@ -2558,6 +2595,7 @@ export class MockAuthService {
     domains: EmergencyDomain[] = [],
   ) {
     this.accessEvents.push({
+      patient_id: emergency.patient_id,
       event_id: createId(),
       practitioner_id: identity.user.id,
       practitioner_name: this.practitionerName(identity),
@@ -2610,7 +2648,7 @@ export class MockAuthService {
       !identity ||
       identity.user.kind !== "STAFF" ||
       !identity.organization ||
-      identity.patientId !== patientId
+      !this.canAccessLocalPatient(identity, patientId)
     ) {
       return genericError(404, "NOT_FOUND", "The requested patient was not found.");
     }
@@ -2671,6 +2709,7 @@ export class MockAuthService {
     };
     recordCollectionSchema.parse(body);
     this.accessEvents.push({
+      patient_id: patientId,
       event_id: createId(),
       practitioner_id: identity.user.id,
       practitioner_name: this.practitionerName(identity),
@@ -2685,6 +2724,193 @@ export class MockAuthService {
       justification_submitted: false,
     });
     return success(200, body);
+  }
+
+  private handleWorklist(request: MockRequest, now: Date): MockResponse {
+    const session = this.getSession(request, now);
+    if (!session)
+      return genericError(401, "AUTHENTICATION_REQUIRED", "Authentication is required.");
+    const identity = mockIdentities.find((item) => item.user.id === session.identityId);
+    if (
+      !identity ||
+      !identity.organization ||
+      !this.isExchangePractitioner(identity) ||
+      this.isIdentitySuspended(identity)
+    )
+      return genericError(403, "POLICY_DENIED", "This worklist is unavailable.");
+    const patientName = (patientId: string) => {
+      const record = this.records.find(
+        (item) =>
+          item.patient_id === patientId &&
+          item.domain === "demographics" &&
+          item.source.organization_id === identity.organization?.organization_id,
+      );
+      return record && "name" in record.payload ? record.payload.name : "Patient";
+    };
+    const items: WorklistItem[] = [];
+    for (const emergency of this.emergencySessions) {
+      if (
+        emergency.practitioner_id !== identity.user.id ||
+        emergency.recipient_org_id !== identity.organization.organization_id
+      )
+        continue;
+      this.refreshEmergencySession(emergency, now);
+      if (emergency.justification_status !== "SUBMITTED")
+        items.push({
+          id: emergency.id,
+          type: "EMERGENCY_REVIEW",
+          patient_id: emergency.patient_id,
+          patient_name: patientName(emergency.patient_id),
+          due_at: emergency.justification_due_at,
+        });
+    }
+    for (const entry of this.consentRequests) {
+      if (
+        entry.requesting_practitioner_id !== identity.user.id ||
+        entry.recipient_org_id !== identity.organization.organization_id ||
+        !this.canAccessLocalPatient(identity, entry.patient_id)
+      )
+        continue;
+      this.expireRequest(entry, now);
+      const grant = this.consentGrants.find(
+        (item) =>
+          item.request_id === entry.id &&
+          item.status === "ACTIVE" &&
+          new Date(item.expires_at).getTime() > now.getTime(),
+      );
+      if (entry.status === "PENDING" || grant)
+        items.push({
+          id: entry.id,
+          type: grant ? "RECORDS_READY" : "REQUEST_PENDING",
+          patient_id: entry.patient_id,
+          patient_name: patientName(entry.patient_id),
+          due_at: grant?.expires_at ?? entry.expires_at,
+        });
+    }
+    items.sort(
+      (a, b) =>
+        Number(b.type === "EMERGENCY_REVIEW") - Number(a.type === "EMERGENCY_REVIEW") ||
+        a.due_at.localeCompare(b.due_at) ||
+        a.id.localeCompare(b.id),
+    );
+    const limit = Number(getQueryValue(request.query, "limit") ?? 25);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+      return genericError(422, "VALIDATION_ERROR", "The request could not be validated.");
+    const scope = JSON.stringify([
+      "worklist",
+      identity.user.id,
+      identity.organization.organization_id,
+      limit,
+    ]);
+    const cursor = getQueryValue(request.query, "cursor");
+    const state = cursor ? this.collectionCursors.get(cursor) : undefined;
+    if (cursor && (!state || state.scope !== scope || state.expires <= now.getTime()))
+      return genericError(422, "VALIDATION_ERROR", "This page has expired. Refresh your worklist.");
+    const offset = state?.offset ?? 0;
+    let nextCursor: string | null = null;
+    if (offset + limit < items.length) {
+      nextCursor = createId();
+      this.collectionCursors.set(nextCursor, {
+        scope,
+        offset: offset + limit,
+        expires: now.getTime() + 300_000,
+      });
+    }
+    return success(
+      200,
+      worklistSchema.parse({
+        items: items.slice(offset, offset + limit),
+        next_cursor: nextCursor,
+        correlation_id: createId(),
+      }),
+    );
+  }
+
+  private handlePatientContext(request: MockRequest, now: Date, patientId: string): MockResponse {
+    const session = this.getSession(request, now);
+    if (!session)
+      return genericError(401, "AUTHENTICATION_REQUIRED", "Authentication is required.");
+    const identity = mockIdentities.find((item) => item.user.id === session.identityId);
+    if (
+      !identity ||
+      !identity.organization ||
+      this.isIdentitySuspended(identity) ||
+      !this.canAccessLocalPatient(identity, patientId) ||
+      !identity.permissions.includes("local_records.read_with_context")
+    ) {
+      return genericError(404, "NOT_FOUND", "The patient was not found.");
+    }
+    const record = this.records.find(
+      (item) =>
+        item.patient_id === patientId &&
+        item.domain === "demographics" &&
+        item.source.organization_id === identity.organization?.organization_id,
+    );
+    if (!record || !("date_of_birth" in record.payload))
+      return genericError(404, "NOT_FOUND", "The patient was not found.");
+    const encounters = this.encounters
+      .filter(
+        (item) =>
+          item.patient_id === patientId &&
+          item.organization_id === identity.organization?.organization_id &&
+          item.status === "OPEN",
+      )
+      .sort((a, b) => b.started_at.localeCompare(a.started_at));
+    const body = {
+      patient: {
+        patient_id: patientId,
+        health_id: `RSH-${patientId}`,
+        name: record.payload.name,
+        date_of_birth: record.payload.date_of_birth,
+      },
+      encounters,
+      can_request_records: this.isExchangePractitioner(identity) && encounters.length > 0,
+      can_activate_emergency:
+        this.canActivateEmergency(identity) && encounters.some((item) => item.type === "EMERGENCY"),
+      correlation_id: createId(),
+    };
+    return success(200, patientContextSchema.parse(body));
+  }
+
+  private notificationPatientId(notification: Notification) {
+    return notification.metadata.request_id
+      ? this.consentRequests.find((item) => item.id === notification.metadata.request_id)
+          ?.patient_id
+      : this.emergencySessions.find((item) => item.id === notification.metadata.session_id)
+          ?.patient_id;
+  }
+
+  private handleReadNotification(
+    request: MockRequest,
+    now: Date,
+    notificationId: string,
+  ): MockResponse {
+    const authorization = this.authorizePortalMutation(request, now);
+    if ("status" in authorization) return authorization;
+    const { session, identity, idempotencyKey } = authorization;
+    if (
+      !request.body ||
+      typeof request.body !== "object" ||
+      Array.isArray(request.body) ||
+      Object.keys(request.body).length
+    ) {
+      return genericError(422, "VALIDATION_ERROR", "The request could not be validated.");
+    }
+    const notification = this.notifications.find(
+      (item) =>
+        item.id === notificationId && this.notificationPatientId(item) === identity.patientId,
+    );
+    if (!notification) return genericError(404, "NOT_FOUND", "The notification was not found.");
+    const key = this.mutationKey(request, idempotencyKey, session.id);
+    const replay = this.getReplay(key, request.body);
+    if (replay) return replay;
+    notification.seen_at ??= serializeDate(now);
+    const response = success(200, {
+      notification: { ...notification },
+      correlation_id: createId(),
+    });
+    this.mutations.set(key, { fingerprint: canonicalize(request.body), response });
+    return response;
   }
 
   private handlePortal(request: MockRequest, now: Date): MockResponse {
@@ -2729,18 +2955,48 @@ export class MockAuthService {
       completeness_notice:
         "Information may be unavailable or specially protected; absence is not confirmation of no condition.",
     };
+    const limit = Number(getQueryValue(request.query, "limit") ?? 25);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+      return genericError(422, "VALIDATION_ERROR", "The request could not be validated.");
+    const sections = ["facilities", "requests", "grants", "access", "notifications"] as const;
+    for (const section of sections) {
+      const cursor = getQueryValue(request.query, `${section}_cursor`);
+      const state = cursor ? this.collectionCursors.get(cursor) : undefined;
+      const scope = JSON.stringify(["portal", identity.user.id, section, limit]);
+      if (cursor && (!state || state.scope !== scope || state.expires <= now.getTime()))
+        return genericError(422, "VALIDATION_ERROR", "This page has expired. Refresh your portal.");
+    }
+    const page = <T>(section: string, items: T[]) => {
+      const cursor = getQueryValue(request.query, `${section}_cursor`);
+      const offset = (cursor ? this.collectionCursors.get(cursor)?.offset : 0) ?? 0;
+      let nextCursor: string | null = null;
+      if (offset + limit < items.length) {
+        nextCursor = createId();
+        this.collectionCursors.set(nextCursor, {
+          scope: JSON.stringify(["portal", identity.user.id, section, limit]),
+          offset: offset + limit,
+          expires: now.getTime() + 300_000,
+        });
+      }
+      return { ...pageBase, items: items.slice(offset, offset + limit), next_cursor: nextCursor };
+    };
     const body = {
       patient,
-      facilities: { items: sourceList, ...pageBase },
-      requests: { items: requests, ...pageBase },
-      grants: { items: grants, ...pageBase },
-      access: {
-        items: this.accessEvents.filter(
-          (event) => event.recipient.organization_id === DEMO_UNITY_ORGANIZATION_ID,
+      facilities: page("facilities", sourceList),
+      requests: page("requests", requests),
+      grants: page("grants", grants),
+      access: page(
+        "access",
+        this.accessEvents
+          .filter((event) => event.patient_id === identity.patientId)
+          .map(({ patient_id: _patientId, ...event }) => event),
+      ),
+      notifications: page(
+        "notifications",
+        this.notifications.filter(
+          (item) => this.notificationPatientId(item) === identity.patientId,
         ),
-        ...pageBase,
-      },
-      notifications: { items: this.notifications, ...pageBase },
+      ),
       correlation_id: createId(),
     };
     portalResponseSchema.parse(body);

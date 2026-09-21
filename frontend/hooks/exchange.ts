@@ -8,10 +8,11 @@ import {
   getPortal,
   getRemoteRecords,
   listConsentRequests,
+  markNotificationRead,
   revokeGrant,
 } from "@/features/exchange/api";
 import type { SourcePurpose } from "@/features/exchange/api";
-import type { ExchangeDomain } from "@/lib/api/contracts/exchange";
+import type { ExchangeDomain, PortalResponse } from "@/lib/api/contracts/exchange";
 
 export const exchangeKeys = {
   all: ["exchange"] as const,
@@ -76,9 +77,62 @@ export function useRemoteRecords(
 }
 
 export function usePortal(enabled = true) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: exchangeKeys.portal,
-    queryFn: getPortal,
+    queryFn: ({ pageParam }) => getPortal(pageParam),
+    initialPageParam: {} as Parameters<typeof getPortal>[0],
+    getNextPageParam: (lastPage, _pages, previousCursors) => {
+      const cursors = Object.fromEntries(
+        ["facilities", "requests", "grants", "access", "notifications"].flatMap((key) => {
+          const cursor = lastPage[key as "notifications"].next_cursor;
+          return cursor ? [[`${key}_cursor`, cursor]] : [];
+        }),
+      );
+      return Object.keys(cursors).length ? { ...previousCursors, ...cursors } : undefined;
+    },
+    select: (data): PortalResponse => {
+      const latest = data.pages[0];
+      const merge = <T>(items: T[], key: (item: T) => string) =>
+        Array.from(new Map(items.map((item) => [key(item), item])).values());
+      return {
+        ...latest,
+        facilities: {
+          ...latest.facilities,
+          items: merge(
+            data.pages.flatMap((page) => page.facilities.items),
+            (item) => item.organization_id,
+          ),
+        },
+        requests: {
+          ...latest.requests,
+          items: merge(
+            data.pages.flatMap((page) => page.requests.items),
+            (item) => item.id,
+          ),
+        },
+        grants: {
+          ...latest.grants,
+          items: merge(
+            data.pages.flatMap((page) => page.grants.items),
+            (item) => item.id,
+          ),
+        },
+        access: {
+          ...latest.access,
+          items: merge(
+            data.pages.flatMap((page) => page.access.items),
+            (item) => item.event_id,
+          ),
+        },
+        notifications: {
+          ...latest.notifications,
+          items: merge(
+            data.pages.flatMap((page) => page.notifications.items),
+            (item) => item.id,
+          ),
+        },
+      };
+    },
     enabled,
     staleTime: 0,
     gcTime: 5 * 60 * 1000,
@@ -137,5 +191,13 @@ export function useRevokeGrant() {
       queryClient.invalidateQueries({ queryKey: exchangeKeys.all });
       queryClient.invalidateQueries({ queryKey: exchangeKeys.portal });
     },
+  });
+}
+
+export function useMarkNotificationRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: markNotificationRead,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: exchangeKeys.portal }),
   });
 }

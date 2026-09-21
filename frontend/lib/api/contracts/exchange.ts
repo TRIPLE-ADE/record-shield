@@ -172,6 +172,11 @@ export const notificationSchema = z.strictObject({
   }),
 });
 
+export const notificationReadResponseSchema = z.strictObject({
+  notification: notificationSchema,
+  correlation_id: uuid,
+});
+
 const portalPageFields = {
   next_cursor: z.string().min(1).max(2048).nullable(),
   correlation_id: uuid,

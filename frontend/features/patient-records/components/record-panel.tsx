@@ -1,5 +1,6 @@
 "use client";
 
+import type { CareEditingState } from "@/hooks/care-selection";
 import { ClockIcon } from "@phosphor-icons/react";
 import type { Domain } from "@/lib/api/contracts/records";
 import { useLocalRecords } from "@/hooks/patient-records";
@@ -14,12 +15,14 @@ export function RecordPanel({
   selected,
   canWrite,
   encounterId,
+  onEditingChange,
 }: {
   patientId: string;
   selectedDomain: Domain;
   selected: ReturnType<typeof useLocalRecords>;
   canWrite: boolean;
   encounterId?: string;
+  onEditingChange?: (state: CareEditingState) => void;
 }) {
   return (
     <div className="min-w-0 space-y-5">
@@ -42,6 +45,8 @@ export function RecordPanel({
 
       <RecordResults selected={selected} canWrite={canWrite} />
       <RecordComposer
+        key={`${patientId}:${encounterId ?? "none"}:${selectedDomain}`}
+        onEditingChange={onEditingChange}
         patientId={patientId}
         selectedDomain={selectedDomain}
         canWrite={canWrite}

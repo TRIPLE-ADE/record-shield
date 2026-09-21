@@ -7,7 +7,9 @@ import { domainGroups, domainMeta } from "../data/domain-meta";
 export function RecordDomainNavigation({
   selectedDomain,
   onSelect,
+  disabled = false,
 }: {
+  disabled?: boolean;
   selectedDomain: Domain;
   onSelect: (domain: Domain) => void;
 }) {
@@ -20,6 +22,7 @@ export function RecordDomainNavigation({
         <select
           id="record-category"
           value={selectedDomain}
+          disabled={disabled}
           onChange={(event) => onSelect(event.target.value as Domain)}
           className="w-full rounded-lg border border-input bg-card px-3 py-2.5 text-sm"
         >
@@ -53,6 +56,7 @@ export function RecordDomainNavigation({
                     <button
                       key={domain}
                       type="button"
+                      disabled={disabled}
                       aria-current={active ? "page" : undefined}
                       className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
                         active

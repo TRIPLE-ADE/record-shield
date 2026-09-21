@@ -12,17 +12,28 @@ import type { PortalResponse } from "@/lib/api/contracts/exchange";
 import { formatDomain, formatUtcDate } from "@/utils/formatters";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { NotificationsCard } from "./notifications-card";
 import { ApprovalCard } from "./approval-card";
 import { GrantCard } from "./grant-card";
 import { PortalState } from "./portal-state";
 
 type PortalPageViewProps = {
   data: PortalResponse;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
   onLogout: () => void;
   isLoggingOut: boolean;
 };
 
-export function PortalPageView({ data, onLogout, isLoggingOut }: PortalPageViewProps) {
+export function PortalPageView({
+  data,
+  onLogout,
+  isLoggingOut,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
+}: PortalPageViewProps) {
   return (
     <main
       id="main-content"
@@ -139,7 +150,7 @@ export function PortalPageView({ data, onLogout, isLoggingOut }: PortalPageViewP
                   >
                     <span className="text-sm font-medium">{facility.name}</span>
                     <span className="text-[0.65rem] uppercase tracking-[0.12em] text-muted-foreground">
-                      {facility.mode === "LITE" ? "Lite" : "EMR"}
+                      Connected
                     </span>
                   </div>
                 ))}
@@ -171,14 +182,14 @@ export function PortalPageView({ data, onLogout, isLoggingOut }: PortalPageViewP
                 ) : null}
               </CardContent>
             </Card>
-            {data.notifications.items.length ? (
-              <p className="text-xs leading-5 text-muted-foreground">
-                {data.notifications.items.length} notification
-                {data.notifications.items.length === 1 ? "" : "s"} available.
-              </p>
-            ) : null}
+            <NotificationsCard notifications={data.notifications.items} />
           </aside>
         </section>
+        {hasMore ? (
+          <Button className="mt-6" variant="outline" onClick={onLoadMore} disabled={isLoadingMore}>
+            {isLoadingMore ? "Loading…" : "Load more updates"}
+          </Button>
+        ) : null}
       </div>
     </main>
   );

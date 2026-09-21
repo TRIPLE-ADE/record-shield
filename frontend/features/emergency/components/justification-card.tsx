@@ -53,6 +53,7 @@ export function JustificationCard({ session }: { session: EmergencySession }) {
       <CardContent className="px-5 pb-5">
         <form className="space-y-3" onSubmit={form.handleSubmit(submit)}>
           <Textarea
+            aria-label="Reason emergency access was needed"
             {...form.register("narrative")}
             rows={4}
             minLength={20}

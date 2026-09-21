@@ -6,7 +6,7 @@ This file is the working agreement for AI agents changing the frontend. Keep the
 
 - Work in `frontend/` for the Next.js application. The repository root also contains backend and product documents; do not change those while implementing frontend work unless the user explicitly asks.
 - `../docs/RecordShield_API_Contract.md` and `../docs/RecordShield_OpenAPI.json` are the API authority. Match their paths, status codes, headers, cookies, closed response shapes, expiry rules, and safe error behavior.
-- `../docs/ui-implementation-plan.md` is the internal implementation plan. Leave it unchanged when implementing code unless the user explicitly asks for a plan update.
+- `PRODUCT_PLAN.md` is the single frontend implementation plan. Keep its progress and verification notes current; do not create competing revamp or implementation plans.
 - All current data is synthetic. Never introduce real patient data, credentials, or clinical payloads into fixtures, logs, URLs, local storage, screenshots, or tests.
 
 ## Architecture

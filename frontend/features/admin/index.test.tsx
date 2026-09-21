@@ -28,7 +28,7 @@ test("renders hospital policy and duty context controls", async () => {
     .element(page.getByRole("heading", { level: 1, name: "Administration" }))
     .toBeVisible();
   await expect.element(page.getByText("Emergency policy")).toBeVisible();
-  await expect.element(page.getByText("CARE")).toBeVisible();
+  await expect.element(page.getByText("Care relationship")).toBeVisible();
   await expect.element(page.getByRole("button", { name: "Save policy" })).toBeVisible();
 });
 

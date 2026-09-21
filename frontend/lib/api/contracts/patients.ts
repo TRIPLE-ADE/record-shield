@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { encounterSchema } from "./records";
 import { sourceSchema } from "./auth";
 import { patientSummarySchema } from "./exchange";
 
@@ -25,3 +26,12 @@ export const patientDirectoryCollectionSchema = z.strictObject({
 
 export type PatientDirectoryEntry = z.infer<typeof patientDirectoryEntrySchema>;
 export type PatientDirectoryCollection = z.infer<typeof patientDirectoryCollectionSchema>;
+
+export const patientContextSchema = z.strictObject({
+  patient: patientSummarySchema,
+  encounters: z.array(encounterSchema),
+  can_request_records: z.boolean(),
+  can_activate_emergency: z.boolean(),
+  correlation_id: z.string().uuid(),
+});
+export type PatientContext = z.infer<typeof patientContextSchema>;

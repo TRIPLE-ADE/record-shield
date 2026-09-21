@@ -1,16 +1,18 @@
 "use client";
 
 import { redirect } from "next/navigation";
-import { useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import type { SessionContext } from "@/lib/api/contracts/auth";
-import type { Domain } from "@/lib/api/contracts/records";
 import {
   canActivateEmergency,
   canWriteLocalDomain,
   isTreatingPractitioner,
 } from "@/utils/authorization";
 import { getPatientSummary } from "@/utils/clinical-records";
+import { useCareSelection } from "@/hooks/care-selection";
+import { CareVisitPanel } from "./components/care-visit-panel";
+import { DiscardDraftDialog } from "./components/discard-draft-dialog";
+import { usePatientContext } from "@/hooks/patients";
 import { useSession } from "@/hooks/auth";
 import { useLocalRecords, type RecordPurpose } from "@/hooks/patient-records";
 import {
@@ -24,7 +26,6 @@ import type { PatientRecordsPageProps } from "./types";
 
 export default function PatientRecordsPage({ patientId }: PatientRecordsPageProps) {
   const session = useSession();
-  const [selectedDomain, setSelectedDomain] = useState<Domain>("demographics");
   const context = session.data;
   const purpose: RecordPurpose =
     context?.role === "CLERK_HEALTH_ATTENDANT" ? "administration" : "treatment";
@@ -32,13 +33,18 @@ export default function PatientRecordsPage({ patientId }: PatientRecordsPageProp
     context?.organization &&
     context.permissions_summary.includes("local_records.read_with_context"),
   );
+  const patientContext = usePatientContext(patientId, queryEnabled);
+  const encounters = patientContext.error ? [] : (patientContext.data?.encounters ?? []);
+  const care = useCareSelection(encounters);
+  const selectedDomain = care.selection.domain;
   const overview = useLocalRecords(patientId, "demographics", purpose, { enabled: queryEnabled });
   const selected = useLocalRecords(patientId, selectedDomain, purpose, { enabled: queryEnabled });
   const patientRecord = overview.data?.items.find((record) => record.domain === "demographics");
   const patient = getPatientSummary(patientRecord);
   const localPatientId = patientRecord?.source.local_patient_id;
-  const encounterId = overview.data?.items[0]?.encounter_id;
-  const canWrite = canWriteLocalDomain(context, selectedDomain);
+  const encounterId = care.encounter?.id;
+  const canWrite =
+    canWriteLocalDomain(context, selectedDomain) && !patientContext.error && !selected.error;
   const source = selected.data?.source ?? overview.data?.source;
 
   if (session.isPending) return <PatientRecordsLoading />;
@@ -80,17 +86,45 @@ export default function PatientRecordsPage({ patientId }: PatientRecordsPageProp
         context={authenticatedContext}
         sourceName={source?.name}
         sourceMode={source?.mode}
-        canExchange={isTreatingPractitioner(context.role) && context.patient_id === patientId}
-        canEmergency={canActivateEmergency(context) && context.patient_id === patientId}
+        canExchange={
+          isTreatingPractitioner(context.role) &&
+          !patientContext.error &&
+          Boolean(patientContext.data?.can_request_records)
+        }
+        canEmergency={
+          canActivateEmergency(context) &&
+          !patientContext.error &&
+          Boolean(patientContext.data?.can_activate_emergency)
+        }
+      />
+      <CareVisitPanel
+        encounters={encounters}
+        selectedId={care.selection.encounterId}
+        loading={patientContext.isPending}
+        error={Boolean(patientContext.error)}
+        onRetry={() => patientContext.refetch()}
+        onSelect={(id) => care.requestSelection({ encounterId: id })}
+        saving={care.editing.saving}
+        connected={context.organization.mode !== "LITE"}
+      />
+      <DiscardDraftDialog
+        open={care.discardOpen}
+        onKeep={care.keepEditing}
+        onDiscard={care.discard}
       />
       <section className="mt-7 grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
-        <RecordDomainNavigation selectedDomain={selectedDomain} onSelect={setSelectedDomain} />
+        <RecordDomainNavigation
+          selectedDomain={selectedDomain}
+          disabled={care.editing.saving}
+          onSelect={(domain) => care.requestSelection({ domain })}
+        />
         <RecordPanel
           patientId={patientId}
           selectedDomain={selectedDomain}
           selected={selected}
           canWrite={canWrite}
           encounterId={encounterId}
+          onEditingChange={care.setEditing}
         />
       </section>
     </main>

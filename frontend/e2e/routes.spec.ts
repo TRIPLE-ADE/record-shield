@@ -47,6 +47,12 @@ test("opens the current patient context and writes a local nursing note", async 
   await page
     .getByRole("textbox", { name: "Note" })
     .fill("The evening observation was reviewed with the care team.");
+  await page.getByRole("button", { name: "Vitals", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Leave this unsaved entry?" })).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  await expect(page.getByRole("textbox", { name: "Note" })).toHaveValue(
+    "The evening observation was reviewed with the care team.",
+  );
   await page.getByRole("button", { name: "Save note" }).click();
   await expect(
     page.getByText("The evening observation was reviewed with the care team."),
@@ -99,6 +105,16 @@ test("activates a bounded emergency summary and requests one explicit domain", a
     .fill("Confirm the recorded allergy before selecting an immediate medication.");
   await page.getByRole("button", { name: "Request additional access" }).click();
   await expect(page.getByText("Additional emergency records")).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Main navigation", exact: true })
+    .getByRole("link", { name: "Home", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Write review" }).first().click();
+  await page
+    .getByRole("textbox", { name: "Reason emergency access was needed" })
+    .fill("The recorded allergy was necessary to choose safe immediate medication.");
+  await page.getByRole("button", { name: "Submit clinical review" }).click();
+  await expect(page.getByText("Your clinical review has been recorded.")).toBeVisible();
 });
 
 test("completes a patient-approved source exchange", async ({ page }) => {
@@ -124,6 +140,12 @@ test("completes a patient-approved source exchange", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/portal$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Review who can access/);
+  const notification = page
+    .getByRole("list", { name: "Notifications", exact: true })
+    .getByRole("listitem")
+    .first();
+  await notification.getByRole("button", { name: "Mark as read" }).click();
+  await expect(notification.getByText("Read", { exact: true })).toBeVisible();
   const pendingRequest = page
     .locator("form")
     .filter({ hasText: "Review source allergies" })
@@ -245,4 +267,23 @@ test("mobile navigation opens patients and access requests without horizontal ov
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+});
+
+test("record sharing offers the second patient’s own visit", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
+  await page.getByRole("button", { name: "Amina Yusuf" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "Open records for Ada Nwosu" }).click();
+  await page.getByRole("link", { name: "Request records" }).click();
+  await expect(page.getByLabel("Current visit")).toHaveValue(
+    "00000000-0000-4000-8000-000000000026",
+  );
+  await page.getByRole("button", { name: "Select Mercy General" }).click();
+  await page.getByRole("checkbox", { name: "Allergies" }).check();
+  await page
+    .getByRole("textbox", { name: "Reason for this request" })
+    .fill("Review Ada’s allergy records before confirming the treatment plan.");
+  await page.getByRole("button", { name: "Send request" }).click();
+  await expect(page.getByRole("button", { name: "Cancel request" }).first()).toBeVisible();
 });

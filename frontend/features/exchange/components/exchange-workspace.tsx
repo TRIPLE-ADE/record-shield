@@ -1,5 +1,7 @@
 "use client";
 
+import { VisitSelect } from "@/components/visit-select";
+import type { Encounter } from "@/lib/api/contracts/records";
 import { useCurrentTime } from "@/hooks/use-current-time";
 import { useState } from "react";
 import { formatDomain, formatUtcDate } from "@/utils/formatters";
@@ -13,14 +15,17 @@ export function ExchangeWorkspace({
   patientId,
   patientName,
   organizationName,
-  receivingEncounterId,
+  encounters,
 }: {
   patientId: string;
   patientName?: string;
   organizationName: string;
-  receivingEncounterId: string;
+  encounters: Encounter[];
 }) {
   const now = useCurrentTime();
+  const [selectedEncounter, setSelectedEncounter] = useState("");
+  const receivingEncounterId =
+    encounters.find((item) => item.id === selectedEncounter)?.id ?? encounters[0]?.id ?? "";
   const requests = useConsentRequests(patientId);
   const [selectedGrantId, setSelectedGrantId] = useState("");
   const availableGrants = requests.error
@@ -52,6 +57,13 @@ export function ExchangeWorkspace({
         patientName={patientName}
         organizationName={organizationName}
       />
+      <div className="mt-6">
+        <VisitSelect
+          encounters={encounters}
+          value={receivingEncounterId}
+          onChange={setSelectedEncounter}
+        />
+      </div>
       <ol
         aria-label="Record sharing steps"
         className="mt-6 grid gap-3 rounded-xl border border-border bg-card p-4 text-sm sm:grid-cols-3"

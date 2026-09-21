@@ -2,25 +2,20 @@
 
 import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
-import { getPatientName } from "@/utils/clinical-records";
 import { isTreatingPractitioner } from "@/utils/authorization";
 import { useSession } from "@/hooks/auth";
-import { useLocalRecords } from "@/hooks/patient-records";
+import { usePatientContext } from "@/hooks/patients";
 import { ExchangeLoading, ExchangeState, ExchangeWorkspace } from "./components";
 import type { ExchangePageProps } from "./types";
 
 export default function ExchangePage({ patientId }: ExchangePageProps) {
   const session = useSession();
   const context = session.data;
-  const localRecords = useLocalRecords(patientId, "demographics", "treatment", {
-    enabled: Boolean(context?.organization && context.patient_id === patientId),
-  });
-  const receivingEncounterId = localRecords.data?.items[0]?.encounter_id ?? "";
-  const patientName = getPatientName(localRecords.data?.items[0]);
+  const patient = usePatientContext(patientId, Boolean(context?.organization));
 
-  if (session.isPending || localRecords.isPending) return <ExchangeLoading />;
+  if (session.isPending) return <ExchangeLoading />;
   if (session.error instanceof ApiError && session.error.status === 401) redirect("/login");
-  if (!context || context.patient_id !== patientId || !context.organization) {
+  if (!context || !context.organization) {
     return (
       <ExchangeState
         kind="denied"
@@ -39,12 +34,22 @@ export default function ExchangePage({ patientId }: ExchangePageProps) {
     );
   }
 
+  if (patient.isPending) return <ExchangeLoading />;
+  if (patient.error || !patient.data?.can_request_records)
+    return (
+      <ExchangeState
+        kind="denied"
+        title="Record sharing unavailable"
+        description="An active visit and permission to care for this patient are required. Return to the patient list or ask your care team for help."
+      />
+    );
+
   return (
     <ExchangeWorkspace
       patientId={patientId}
-      patientName={patientName}
+      patientName={patient.data.patient.name}
       organizationName={context.organization.name}
-      receivingEncounterId={receivingEncounterId}
+      encounters={patient.data.encounters}
     />
   );
 }

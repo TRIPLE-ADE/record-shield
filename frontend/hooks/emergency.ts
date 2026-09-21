@@ -51,7 +51,10 @@ export function useActivateEmergency() {
 
   return useMutation({
     mutationFn: activateEmergency,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: emergencyKeys.all }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["worklist"] });
+      return queryClient.invalidateQueries({ queryKey: emergencyKeys.all });
+    },
   });
 }
 
@@ -60,7 +63,10 @@ export function useExpandEmergency() {
 
   return useMutation({
     mutationFn: expandEmergency,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: emergencyKeys.all }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["worklist"] });
+      return queryClient.invalidateQueries({ queryKey: emergencyKeys.all });
+    },
   });
 }
 
@@ -69,7 +75,10 @@ export function useSubmitEmergencyJustification() {
 
   return useMutation({
     mutationFn: submitEmergencyJustification,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: emergencyKeys.all }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["worklist"] });
+      return queryClient.invalidateQueries({ queryKey: emergencyKeys.all });
+    },
   });
 }
 
@@ -78,6 +87,9 @@ export function useRevokeEmergency() {
 
   return useMutation({
     mutationFn: revokeEmergency,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: emergencyKeys.all }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["worklist"] });
+      return queryClient.invalidateQueries({ queryKey: emergencyKeys.all });
+    },
   });
 }

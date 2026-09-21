@@ -1,5 +1,6 @@
 "use client";
 
+import type { CareEditingState } from "@/hooks/care-selection";
 import type { Domain } from "@/lib/api/contracts/records";
 import { NursingNoteComposer } from "./nursing-note-composer";
 import { VitalComposer } from "./vital-composer";
@@ -10,17 +11,31 @@ export function RecordComposer({
   selectedDomain,
   canWrite,
   encounterId,
+  onEditingChange,
 }: {
   patientId: string;
   selectedDomain: Domain;
   canWrite: boolean;
   encounterId?: string;
+  onEditingChange?: (state: CareEditingState) => void;
 }) {
   if (canWrite && encounterId && selectedDomain === "nursing_notes") {
-    return <NursingNoteComposer patientId={patientId} encounterId={encounterId} />;
+    return (
+      <NursingNoteComposer
+        patientId={patientId}
+        encounterId={encounterId}
+        onEditingChange={onEditingChange}
+      />
+    );
   }
   if (canWrite && encounterId && selectedDomain === "vitals") {
-    return <VitalComposer patientId={patientId} encounterId={encounterId} />;
+    return (
+      <VitalComposer
+        patientId={patientId}
+        encounterId={encounterId}
+        onEditingChange={onEditingChange}
+      />
+    );
   }
   if (
     canWrite &&
@@ -30,7 +45,7 @@ export function RecordComposer({
     return (
       <PatientRecordsState
         kind="unavailable"
-        title="An open encounter is required to add a record"
+        title="An open visit is required to add a record"
         description="This patient has no available visit for a new record."
       />
     );

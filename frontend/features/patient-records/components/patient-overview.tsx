@@ -51,7 +51,7 @@ export function PatientOverview({
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
             <span>Born {patient?.date_of_birth ?? "Not available"}</span>
             <span>{patient?.gender ?? "Gender unavailable"}</span>
-            <span>{encounterId ? "Current encounter" : "No open encounter"}</span>
+            <span>{encounterId ? "Current visit" : "No open visit"}</span>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
