@@ -11,6 +11,7 @@ Implemented routes include:
 - Health: `GET /api/v1/health`
 - Authentication: CSRF bootstrap, login, logout, and `GET /api/v1/me`
 - Local workspace: encounters, local record list/create, and record correction
+- Patient directory: `GET /api/v1/patients`, scoped to the authenticated staff context
 - Exchange and consent: source discovery, consent requests, grants, revocation, and read-only remote records
 - Patient portal: `GET /api/v1/portal`
 - Emergency access: activation, summary read, expansion, justification, status and revocation
@@ -83,6 +84,23 @@ docker compose up -d db
 docker compose ps
 ```
 
+Inspect the database and sample many records:
+
+```bash
+# Enter the MySQL password when prompted.
+docker compose exec db mysql -urecordshield -p recordshield -e "SHOW TABLES;"
+docker compose exec db mysql -urecordshield -p recordshield -e "SELECT COUNT(*) AS record_count FROM clinical_records; SELECT id, patient_id, organization_id, domain, subtype, current_version FROM clinical_records ORDER BY id LIMIT 100;"
+docker compose exec db mysql -urecordshield -p recordshield -e "SELECT cr.id, cr.patient_id, cr.domain, cr.subtype, crr.version, crr.payload, crr.recorded_at FROM clinical_records cr JOIN clinical_record_revisions crr ON crr.record_id = cr.id AND crr.version = cr.current_version ORDER BY crr.recorded_at DESC LIMIT 100;"
+```
+
+For a MySQL server running outside Docker, use the same SQL with:
+
+```bash
+mysql -h 127.0.0.1 -P 3306 -urecordshield -p recordshield
+```
+
+Clinical payloads are sensitive. Use these inspection commands only against local development data and do not paste their output into logs, issues, or chat.
+
 ### Container images
 
 Each process has its own image:
@@ -136,6 +154,37 @@ uv run alembic revision --autogenerate -m "describe change"
 ```
 
 Every model change must include a migration. Keep models imported through `app/models/__init__.py` so Alembic metadata remains complete.
+
+### Seed a complete development dataset
+
+After applying migrations, populate the application tables with deterministic, fictional data:
+
+```bash
+uv run python -m app.tools.seed
+```
+
+The command is safe to run repeatedly. It adds rows only when their fixture IDs are missing and
+prints a per-table insertion summary. The fixture covers encounters, standard/sensitive/restricted
+clinical records and revisions, consent requests and grants, released and denied exchange
+transactions, active and revoked emergency sessions with justifications, audit outbox rows,
+security alerts and reviews, notifications, downtime reconciliation, audit checkpoints and
+idempotency records. The baseline organizations, users, memberships, wards, shifts, assignments,
+policies and patients come from the migrations.
+
+This is development data only; do not run it against a production database. To inspect the result
+in the Docker MySQL database:
+
+```bash
+docker compose exec db mysql -urecordshield -p recordshield -e "SELECT table_name, table_rows FROM information_schema.tables WHERE table_schema = 'recordshield' ORDER BY table_name;"
+docker compose exec db mysql -urecordshield -p recordshield -e "SELECT domain, sensitivity, COUNT(*) AS record_count FROM clinical_records GROUP BY domain, sensitivity ORDER BY domain;"
+```
+
+The mock EMR is a separate database and seeds its own vendor fixture when its process starts. Start
+it as described below before testing cross-organization or emergency source reads:
+
+```bash
+uv run uvicorn mock_emr.main:app --port 8001
+```
 
 ## Run the API
 
