@@ -1,5 +1,5 @@
 import type { Role, Source } from "@/lib/api/contracts/auth";
-import { DEMO_PATIENT_ID } from "./records";
+import { DEMO_PATIENT_ID, DEMO_SECOND_PATIENT_ID } from "./records";
 
 export const DEMO_PASSWORD = "synthetic-example-password";
 
@@ -35,6 +35,18 @@ const unityMedical: Source = {
 const sharedShift = (id: string) => id;
 
 export const mockIdentities: MockIdentity[] = [
+  {
+    user: { id: "00000000-0000-4000-8000-000000000030", username: "ada.patient", kind: "PATIENT" },
+    password: DEMO_PASSWORD,
+    membershipId: null,
+    role: null,
+    organization: null,
+    patientId: DEMO_SECOND_PATIENT_ID,
+    shiftId: null,
+    permissions: [],
+    active: true,
+    membershipActive: true,
+  },
   {
     user: {
       id: "00000000-0000-4000-8000-000000000004",

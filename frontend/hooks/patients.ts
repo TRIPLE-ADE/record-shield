@@ -1,5 +1,5 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { getPatientDirectory } from "@/features/patient-directory/api";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { getPatientDirectory, getPatientContext } from "@/features/patient-directory/api";
 
 export const patientDirectoryKeys = {
   all: ["patient-directory"] as const,
@@ -21,5 +21,15 @@ export function usePatientDirectory(options?: {
     staleTime: 30 * 1000,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function usePatientContext(patientId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["patient-context", patientId],
+    queryFn: () => getPatientContext(patientId),
+    enabled,
+    staleTime: 0,
+    retry: false,
   });
 }

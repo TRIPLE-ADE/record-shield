@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { emergencyReasonOptions } from "../data/options";
 import type { EmergencyActivateFormValues } from "../schemas";
-import type { EmergencyWorkspaceProps } from "../types";
+import type { EmergencyActivationProps } from "../types";
 import { EmergencyPageFrame } from "./emergency-page-frame";
 import { ContextValue } from "./context-value";
 
@@ -27,8 +27,8 @@ export function ActivationView({
   patientName?: string;
   organizationName: string;
   encounterId: string;
-  sources: EmergencyWorkspaceProps["sources"];
-  sessionContext: EmergencyWorkspaceProps["sessionContext"];
+  sources: EmergencyActivationProps["sources"];
+  sessionContext: EmergencyActivationProps["sessionContext"];
   form: ReturnType<typeof useForm<EmergencyActivateFormValues>>;
   necessityConfirmed: boolean;
   isSubmitting: boolean;
@@ -58,7 +58,7 @@ export function ActivationView({
               Confirm the patient and hospital
             </CardTitle>
             <CardDescription>
-              Every field is bound to the active patient, facility, and encounter.
+              Check the patient, hospital, and current visit before continuing.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 px-5 pb-6 sm:px-6">
@@ -66,8 +66,8 @@ export function ActivationView({
               <ContextValue label="Patient" value={patientName ?? "Patient record"} />
               <ContextValue label="Receiving facility" value={organizationName} />
               <ContextValue
-                label="Encounter"
-                value={encounterId ? "Open emergency encounter" : "Unavailable"}
+                label="Visit"
+                value={encounterId ? "Open emergency visit" : "Unavailable"}
               />
             </div>
 
@@ -82,7 +82,7 @@ export function ActivationView({
                   {...form.register("source_org_id")}
                   className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
                 >
-                  <option value="">Choose a linked source</option>
+                  <option value="">Choose a hospital</option>
                   {sources.map((source) => (
                     <option
                       key={source.organization.organization_id}

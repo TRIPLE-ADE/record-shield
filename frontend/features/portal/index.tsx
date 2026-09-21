@@ -13,7 +13,7 @@ export default function PortalPage() {
   const context = session.data;
   const portal = usePortal(Boolean(context?.user.kind === "PATIENT"));
 
-  if (session.isPending || portal.isPending) return <PortalLoading />;
+  if (session.isPending) return <PortalLoading />;
   if (session.error instanceof ApiError && session.error.status === 401) redirect("/login");
   if (!context || context.user.kind !== "PATIENT") {
     return (
@@ -23,6 +23,7 @@ export default function PortalPage() {
       />
     );
   }
+  if (portal.isPending) return <PortalLoading />;
   if (portal.error) {
     return <PortalState title="Portal unavailable" description={portal.error.message} />;
   }
@@ -38,6 +39,9 @@ export default function PortalPage() {
   return (
     <PortalPageView
       data={portal.data}
+      hasMore={portal.hasNextPage}
+      isLoadingMore={portal.isFetchingNextPage}
+      onLoadMore={() => portal.fetchNextPage()}
       isLoggingOut={logout.isPending}
       onLogout={() => logout.mutate(undefined, { onSettled: () => router.replace("/login") })}
     />

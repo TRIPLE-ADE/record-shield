@@ -1923,7 +1923,7 @@ Schema: **EmergencySessionResponse**.
 
 **Caller:** patient account.
 
-patient_id derived exclusively from portal session, never accepted as query. All five sections returned, each independently paginated, using per-section cursors and shared limit. Page cursor never affects other sections. Requests/grants include own status history; facilities are linked verified facilities. Access and notification metadata expose neither raw emergency narratives nor security investigation notes nor clinical records. Requests.reason is the deliberately patient-visible consent purpose. Notifications are in-app; seen_at remains null in MVP (no implicit mutation on GET). Poll every 5 seconds.
+patient_id derived exclusively from portal session, never accepted as query. All five sections returned, each independently paginated, using per-section cursors and shared limit. Page cursor never affects other sections. Requests/grants include own status history; facilities are linked verified facilities. Access and notification metadata expose neither raw emergency narratives nor security investigation notes nor clinical records. Requests.reason is the deliberately patient-visible consent purpose. Notifications are in-app; seen_at changes only through explicit POST /portal/notifications/{id}/read (no implicit mutation on GET). Poll every 5 seconds.
 
 ### Parameters
 
@@ -8334,3 +8334,26 @@ These are the exact component schemas used by the OpenAPI file. `required` is ex
 ## Source and change record
 
 Derived from the delivered RecordShield PRD and Architecture v1.0 (19 September 2026), particularly sections 3, 6–13 and 16. This is a new API detail artifact, not a revision of the original PDF. Contract defaults identified above close missing transport details; product permissions and future-production exclusions remain unchanged. No external API, legal or interoperability conformance claim is made.
+
+
+## Frontend workflow additions — 2026-09-21
+
+These additions support the frontend and mock API; the real backend must implement them before switching services. Existing identifiers and clinical payloads are unchanged. All responses are closed objects, use `Cache-Control: no-store`, include `correlation_id`, and use the existing error envelope.
+
+### GET /patients/{id}/context
+
+Authenticated local staff only. Resolve the patient inside the caller’s current authorized care scope. Unknown/inaccessible patients and suspended contexts return generic 404; unauthenticated requests return 401. Return `{patient: PatientSummary, encounters: Encounter[], can_request_records: boolean, can_activate_emergency: boolean, correlation_id: UUID}`. Encounters are OPEN visits for this patient in the current organization, newest first. Capability flags are server-derived hints: request permission plus an open visit; emergency permission plus an open EMERGENCY visit. They never authorize subsequent requests.
+
+Staff access must not be restricted to `SessionContext.patient_id`. Source discovery, consent creation and emergency activation reauthorize the selected patient and receiving encounter together. A visit belonging to another patient/organization or a closed visit must fail safely. Consent still returns 409 `CONSENT_CHANNEL_UNAVAILABLE` when no patient consent account is linked. The mock now includes the synthetic `ada.patient` account for the second patient, using the existing sample password.
+
+### GET /worklist
+
+Authenticated treating practitioner, current organization only; unauthorized role/suspended context returns 403. Query: `cursor` optional opaque string, `limit` integer 1–100, default 25. Response: `{items: WorklistItem[], next_cursor: string|null, correlation_id: UUID}`. Each closed WorklistItem is `{id: UUID, type: REQUEST_PENDING|RECORDS_READY|EMERGENCY_REVIEW, patient_id: UUID, patient_name: string(1..200), due_at: UTC timestamp}`.
+
+For consent items, `id` is the request ID; for reviews it is the emergency session ID. Only own pending requests or own requests with active, unexpired grants appear. Pending items expire at request expiry; ready items at grant expiry. Own emergency sessions with outstanding justification appear even after access expires/is revoked. Their due_at is the justification deadline. Submitted reviews disappear. Sort reviews first, then due_at ascending and id ascending. No clinical payload, emergency narrative, hidden totals or another practitioner’s tasks. Cursors bind actor, organization and limit, expire after five minutes, and reject invalid/reused scopes with 422. Reads and mutations remain independently authorized.
+
+### POST /portal/notifications/{id}/read
+
+Patient owner only, ownership derived through the linked request/session. Strict empty JSON object body. Standard CSRF and Idempotency-Key headers required. Unknown or another patient’s notification returns generic 404. Acknowledgement returns 200 `{notification: Notification, correlation_id: UUID}`. Set seen_at to the server timestamp once; repeat acknowledgement preserves it. Idempotent replay follows the standard mutation rules. This action does not change consent or grant state. GET /portal never changes seen_at.
+
+Portal access events and notifications are filtered by the signed-in patient before pagination. All five sections honor independent cursors and the shared limit, with actor/section/limit-bound five-minute cursors; invalid or mismatched cursors return 422. Access events expose no internal patient ownership bookkeeping.

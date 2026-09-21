@@ -36,6 +36,7 @@ export default function WorkspacePage() {
       onRefresh={() => {
         void queryClient.invalidateQueries({ queryKey: ["patient-directory"] });
         void queryClient.invalidateQueries({ queryKey: ["exchange"] });
+        void queryClient.invalidateQueries({ queryKey: ["worklist"] });
         void session.refetch();
       }}
     />

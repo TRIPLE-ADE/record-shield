@@ -69,12 +69,11 @@ export function AssignmentList({ assignments }: { assignments: ContextAssignment
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">{assignment.kind}</Badge>
-                    <span className="text-sm font-medium">{assignmentLabel(assignment)}</span>
+                    <Badge variant="outline">{assignmentLabel(assignment)}</Badge>
                     <span className="text-xs text-muted-foreground">v{assignment.version}</span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Membership {formatIdentifier(assignment.data.membership_id)} · Ends{" "}
+                    Staff reference {formatIdentifier(assignment.data.membership_id)} · Ends{" "}
                     {formatSecurityTime(assignment.data.ends_at)}
                   </p>
                 </div>

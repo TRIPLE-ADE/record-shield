@@ -14,7 +14,7 @@ export function ReconciliationResult({ result }: { result: DowntimeReconciliatio
           Reconciliation recorded
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          The original occurrence time remains separate from the recovery record time.
+          The time care was provided is saved separately from the time this form was entered.
         </p>
       </CardHeader>
       <CardContent className="grid gap-4 px-5 pb-5 text-sm sm:grid-cols-2 sm:px-6">
@@ -47,12 +47,12 @@ export function ReconciliationResult({ result }: { result: DowntimeReconciliatio
         <div className="flex items-start gap-2 text-xs text-muted-foreground sm:col-span-2">
           <FingerprintIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-primary" />
           <span className="break-all">
-            Audit event {result.audit_event_id} · correlation {result.correlation_id}
+            Audit reference {result.audit_event_id} · Support reference {result.correlation_id}
           </span>
         </div>
         <p className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
           <CopySimpleIcon aria-hidden="true" className="size-3.5" />
-          A duplicate submission with the same serial and content is safe to retry.
+          You can safely retry this form if its reference and details are unchanged.
         </p>
       </CardContent>
     </Card>

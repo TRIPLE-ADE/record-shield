@@ -4,7 +4,12 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { clearApiSession } from "@/lib/api/client";
 import { login } from "@/features/auth/api";
 import { installMockApi } from "@/lib/mock-api";
-import { DEMO_PATIENT_ID } from "@/lib/mock-api/records";
+import { createEncounter, getLocalRecords } from "./api";
+import {
+  DEMO_PATIENT_ID,
+  DEMO_UNITY_ENCOUNTER_ID,
+  DEMO_UNITY_WARD_ID,
+} from "@/lib/mock-api/records";
 import { QueryProvider } from "@/lib/query/provider";
 import PatientRecordsPage from ".";
 
@@ -59,4 +64,73 @@ test("submits a nursing note through the contract-backed form", async () => {
   await expect
     .element(page.getByText("Checked the patient and updated the evening care plan."))
     .toBeVisible();
+});
+
+test("protects an unsaved note when changing categories", async () => {
+  render(
+    <QueryProvider>
+      <PatientRecordsPage patientId={DEMO_PATIENT_ID} />
+    </QueryProvider>,
+  );
+  await userEvent.click(page.getByRole("button", { name: "Nursing", exact: true }));
+  await userEvent.fill(
+    page.getByRole("textbox", { name: "Note", exact: true }),
+    "This draft should stay with the selected patient visit.",
+  );
+  await userEvent.click(page.getByRole("button", { name: "Vitals", exact: true }));
+  await expect.element(page.getByRole("dialog")).toBeVisible();
+  await userEvent.click(page.getByRole("button", { name: "Keep editing" }));
+  await expect
+    .element(page.getByRole("textbox", { name: "Note", exact: true }))
+    .toHaveValue("This draft should stay with the selected patient visit.");
+  await userEvent.click(page.getByRole("button", { name: "Vitals", exact: true }));
+  await userEvent.click(page.getByRole("button", { name: "Discard draft" }));
+  await expect.element(page.getByText("Add vital", { exact: true })).toBeVisible();
+});
+
+test("saves a note to the selected open visit rather than the demographics visit", async () => {
+  const { encounter } = await createEncounter({
+    patient_id: DEMO_PATIENT_ID,
+    type: "EMERGENCY",
+    ward_id: DEMO_UNITY_WARD_ID,
+  });
+  render(
+    <QueryProvider>
+      <PatientRecordsPage patientId={DEMO_PATIENT_ID} />
+    </QueryProvider>,
+  );
+  await expect
+    .element(page.getByRole("combobox", { name: "Current visit" }))
+    .toHaveValue(encounter.id);
+  await userEvent.click(page.getByRole("button", { name: "Nursing", exact: true }));
+  await userEvent.fill(
+    page.getByRole("textbox", { name: "Note", exact: true }),
+    "New visit observation belongs to the chosen open visit.",
+  );
+  await userEvent.selectOptions(
+    page.getByRole("combobox", { name: "Current visit" }),
+    DEMO_UNITY_ENCOUNTER_ID,
+  );
+  await userEvent.click(page.getByRole("button", { name: "Keep editing" }));
+  await expect
+    .element(page.getByRole("combobox", { name: "Current visit" }))
+    .toHaveValue(encounter.id);
+  await userEvent.click(page.getByRole("button", { name: "Save note" }));
+  await expect
+    .element(
+      page.getByText("New visit observation belongs to the chosen open visit.", { exact: true }),
+    )
+    .toBeVisible();
+  const records = await getLocalRecords({
+    patientId: DEMO_PATIENT_ID,
+    domain: "nursing_notes",
+    purpose: "treatment",
+  });
+  expect(
+    records.items.find(
+      (item) =>
+        "text" in item.payload &&
+        item.payload.text === "New visit observation belongs to the chosen open visit.",
+    )?.encounter_id,
+  ).toBe(encounter.id);
 });

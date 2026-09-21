@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { formatRole, formatTime } from "../utils/format";
 import type { WorkspaceOverviewProps } from "../types";
 import { AssignedPatients } from "./assigned-patients";
-import { AccessRequestList } from "@/features/access-requests/components/access-request-list";
+import { ActionQueue } from "./action-queue";
 import { isTreatingPractitioner } from "@/utils/authorization";
 
 export function WorkspaceOverview({ context, isFetching, onRefresh }: WorkspaceOverviewProps) {
@@ -53,7 +53,7 @@ export function WorkspaceOverview({ context, isFetching, onRefresh }: WorkspaceO
         >
           <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
             <h2 id="requests-heading" className="font-semibold">
-              Your access requests
+              Needs attention
             </h2>
             <Link
               href="/workspace/requests"
@@ -63,7 +63,7 @@ export function WorkspaceOverview({ context, isFetching, onRefresh }: WorkspaceO
               <ArrowRightIcon aria-hidden="true" />
             </Link>
           </div>
-          <AccessRequestList compact />
+          <ActionQueue />
         </section>
       ) : null}
       {security ? (

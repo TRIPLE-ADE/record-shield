@@ -3350,7 +3350,7 @@
         "tags": [
           "portal"
         ],
-        "description": "Authorized caller: patient account.\n\npatient_id derived exclusively from portal session, never accepted as query. All five sections returned, each independently paginated, using per-section cursors and shared limit. Page cursor never affects other sections. Requests/grants include own status history; facilities are linked verified facilities. Access and notification metadata expose neither raw emergency narratives nor security investigation notes nor clinical records. Requests.reason is the deliberately patient-visible consent purpose. Notifications are in-app; seen_at remains null in MVP (no implicit mutation on GET). Poll every 5 seconds.",
+        "description": "Authorized caller: patient account.\n\npatient_id derived exclusively from portal session, never accepted as query. All five sections returned, each independently paginated, using per-section cursors and shared limit. Page cursor never affects other sections. Requests/grants include own status history; facilities are linked verified facilities. Access and notification metadata expose neither raw emergency narratives nor security investigation notes nor clinical records. Requests.reason is the deliberately patient-visible consent purpose. Notifications are in-app; seen_at changes only through POST /portal/notifications/{id}/read (no implicit mutation on GET). Poll every 5 seconds.",
         "parameters": [
           {
             "name": "limit",
@@ -5159,6 +5159,276 @@
                   }
                 ],
                 "outcome": "RECONCILED"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/patients/{id}/context": {
+      "get": {
+        "operationId": "GET_patients_id_context",
+        "summary": "Get current patient visits",
+        "tags": [
+          "patients"
+        ],
+        "description": "Authorized local staff only. Resolve patient within current authorized care scope; unknown, inaccessible or suspended context returns generic 404. Return open visits in the current organization, newest first. Capabilities are server-derived hints; every operation reauthorizes the patient, visit, role and current context. No clinical payload. SessionContext.patient_id is not a staff authorization boundary.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Canonical UUID; resolved within the caller\u2019s authorized scope."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientContext"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "405": {
+            "$ref": "#/components/responses/Error405"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/worklist": {
+      "get": {
+        "operationId": "GET_worklist",
+        "summary": "List outstanding actions",
+        "tags": [
+          "patients"
+        ],
+        "description": "Current treating practitioner only, scoped to their current organization. Items include own pending consent requests, approved requests with a currently active unexpired grant, and own emergency sessions awaiting justification including expired/revoked sessions. Emergency reviews first, then due_at and id ascending. id references the emergency session for EMERGENCY_REVIEW and consent request otherwise. due_at is the justification deadline or request/grant expiry. Submitted reviews disappear. No clinical payload or narratives. Cursor is actor, organization and limit bound, expires after five minutes. Invalid/mismatched/expired cursor: 422. Default limit 25, maximum 100.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "description": "Opaque cursor bound to actor, scope and ordering."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 25
+            },
+            "description": "Maximum number of authorized entries to return."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorklistCollection"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "405": {
+            "$ref": "#/components/responses/Error405"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ]
+      }
+    },
+    "/portal/notifications/{id}/read": {
+      "post": {
+        "operationId": "POST_portal_notifications_id_read",
+        "summary": "Mark a notification as read",
+        "tags": [
+          "portal"
+        ],
+        "description": "Patient owner only. Match ownership through the related consent request or emergency session. Unknown/non-owned notification: generic 404. Strict empty object body. CSRF and Idempotency-Key required. Set seen_at on the first acknowledgement only; repeat acknowledgements preserve the original timestamp. Does not approve, deny or revoke consent. GET never changes seen_at.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Canonical UUID; resolved within the caller\u2019s authorized scope."
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 128
+            },
+            "description": "Matches current server-bound session or pre-login CSRF token."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 128
+            },
+            "description": "Random client-generated key; scoped to actor, method, path and canonical body for 24 hours."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              },
+              "X-Correlation-ID": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationReadResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "422": {
+            "$ref": "#/components/responses/Error422"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          },
+          "405": {
+            "$ref": "#/components/responses/Error405"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          }
+        },
+        "security": [
+          {
+            "SessionCookie": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {}
               }
             }
           }
@@ -11873,6 +12143,123 @@
           "outcome": "RECONCILED",
           "audit_event_id": "00000000-0000-4000-8000-000000000013",
           "correlation_id": "00000000-0000-4000-8000-000000000016"
+        }
+      },
+      "PatientContext": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "patient",
+          "encounters",
+          "can_request_records",
+          "can_activate_emergency",
+          "correlation_id"
+        ],
+        "properties": {
+          "patient": {
+            "$ref": "#/components/schemas/PatientSummary"
+          },
+          "encounters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Encounter"
+            }
+          },
+          "can_request_records": {
+            "type": "boolean"
+          },
+          "can_activate_emergency": {
+            "type": "boolean"
+          },
+          "correlation_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "WorklistItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "patient_id",
+          "patient_name",
+          "due_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "REQUEST_PENDING",
+              "RECORDS_READY",
+              "EMERGENCY_REVIEW"
+            ]
+          },
+          "patient_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "patient_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WorklistCollection": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "next_cursor",
+          "correlation_id"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorklistItem"
+            },
+            "maxItems": 100
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "correlation_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "NotificationReadResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "notification",
+          "correlation_id"
+        ],
+        "properties": {
+          "notification": {
+            "$ref": "#/components/schemas/Notification"
+          },
+          "correlation_id": {
+            "type": "string",
+            "format": "uuid"
+          }
         }
       }
     },

@@ -8,6 +8,7 @@ import {
   consentRequestStatusCollectionSchema,
   expectedVersionSchema,
   portalResponseSchema,
+  notificationReadResponseSchema,
   remoteRecordCollectionSchema,
   sourceCollectionSchema,
   type ApproveConsent,
@@ -131,10 +132,26 @@ export async function getRemoteRecords({
   return remoteRecordCollectionSchema.parse(response.data);
 }
 
-export async function getPortal(): Promise<PortalResponse> {
+export async function getPortal(
+  cursors: Partial<
+    Record<
+      | "facilities_cursor"
+      | "requests_cursor"
+      | "grants_cursor"
+      | "access_cursor"
+      | "notifications_cursor",
+      string
+    >
+  > = {},
+): Promise<PortalResponse> {
   const response = await apiClient.get("/portal", {
-    params: { limit: 25 },
+    params: { limit: 25, ...cursors },
     headers: { "Cache-Control": "no-store" },
   });
   return portalResponseSchema.parse(response.data);
+}
+
+export async function markNotificationRead(notificationId: string) {
+  const response = await apiClient.post(`/portal/notifications/${notificationId}/read`, {});
+  return notificationReadResponseSchema.parse(response.data);
 }
