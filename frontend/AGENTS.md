@@ -18,7 +18,7 @@ The frontend uses Next.js 16 App Router, React 19, TypeScript, Tailwind CSS v4, 
 Routes are composition boundaries. Keep route files in `app/` thin and export the feature page from `features/`:
 
 ```text
-next.config.ts                       -> redirect / to /login
+app/page.tsx                         -> features/landing (public product page)
 app/design-system/page.tsx           -> features/design-system
 app/(auth)/login/page.tsx            -> features/auth
 app/(workspace)/workspace/page.tsx   -> features/workspace
