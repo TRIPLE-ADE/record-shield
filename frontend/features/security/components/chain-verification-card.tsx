@@ -8,6 +8,88 @@ import { useVerifySecurityChain } from "@/hooks/security";
 import type { ChainVerification } from "@/lib/api/contracts/security";
 import { formatSecurityTime } from "../utils/format";
 
+function getVerificationLabels(result?: ChainVerification, unknown?: boolean) {
+  if (result) {
+    return {
+      title: `Checked sequences ${result.checked_from}–${result.checked_to}`,
+      subtitle: formatSecurityTime(result.verified_at),
+    };
+  }
+  if (unknown) {
+    return {
+      title: "Verification state is unknown",
+      subtitle: "The service did not return a verification result.",
+    };
+  }
+  return {
+    title: "No verification run yet",
+    subtitle: "Verification produces a checkpoint for review.",
+  };
+}
+
+function ChainVerificationStatus({
+  result,
+  unknown,
+}: {
+  result?: ChainVerification;
+  unknown: boolean;
+}) {
+  const { title, subtitle } = getVerificationLabels(result, unknown);
+
+  return (
+    <div className="flex items-center gap-3">
+      <CheckCircleIcon aria-hidden="true" className="size-5 text-primary" weight="duotone" />
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+      {result ? (
+        <Badge variant={result.status === "VALID" ? "secondary" : "destructive"}>
+          {result.status}
+        </Badge>
+      ) : unknown ? (
+        <Badge variant="outline">UNKNOWN</Badge>
+      ) : null}
+    </div>
+  );
+}
+
+function ChainVerificationDetails({ result }: { result: ChainVerification }) {
+  return (
+    <>
+      <dl className="grid gap-x-5 gap-y-2 border-t border-border/70 pt-3 text-xs text-muted-foreground sm:grid-cols-4">
+        <div>
+          <dt>First failing sequence</dt>
+          <dd className="mt-1 font-medium text-foreground">
+            {result.first_failing_sequence ?? "None"}
+          </dd>
+        </div>
+        <div>
+          <dt>Failure reason</dt>
+          <dd className="mt-1 font-medium text-foreground">
+            {result.reason?.replaceAll("_", " ") ?? "None"}
+          </dd>
+        </div>
+        <div>
+          <dt>Checkpoint</dt>
+          <dd className="mt-1 font-medium text-foreground">
+            {result.checkpoint_comparison.replaceAll("_", " ")}
+          </dd>
+        </div>
+        <div>
+          <dt>Head sequence</dt>
+          <dd className="mt-1 font-medium text-foreground">{result.checkpoint.sequence}</dd>
+        </div>
+      </dl>
+      {result.status === "INVALID" ? (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          Critical chain integrity failure remains open for review.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export function ChainVerificationCard({
   streamId,
   onResult,
@@ -51,32 +133,7 @@ export function ChainVerificationCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <CheckCircleIcon aria-hidden="true" className="size-5 text-primary" weight="duotone" />
-            <div>
-              <p className="text-sm font-medium">
-                {result
-                  ? `Checked sequences ${result.checked_from}–${result.checked_to}`
-                  : unknown
-                    ? "Verification state is unknown"
-                    : "No verification run yet"}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {result
-                  ? formatSecurityTime(result.verified_at)
-                  : unknown
-                    ? "The service did not return a verification result."
-                    : "Verification produces a checkpoint for review."}
-              </p>
-            </div>
-            {result ? (
-              <Badge variant={result.status === "VALID" ? "secondary" : "destructive"}>
-                {result.status}
-              </Badge>
-            ) : unknown ? (
-              <Badge variant="outline">UNKNOWN</Badge>
-            ) : null}
-          </div>
+          <ChainVerificationStatus result={result} unknown={unknown} />
           <Button variant="outline" onClick={verify} disabled={mutation.isPending}>
             <ArrowClockwiseIcon
               aria-hidden="true"
@@ -85,37 +142,7 @@ export function ChainVerificationCard({
             {mutation.isPending ? "Checking…" : "Verify chain"}
           </Button>
         </div>
-        {result ? (
-          <dl className="grid gap-x-5 gap-y-2 border-t border-border/70 pt-3 text-xs text-muted-foreground sm:grid-cols-4">
-            <div>
-              <dt>First failing sequence</dt>
-              <dd className="mt-1 font-medium text-foreground">
-                {result.first_failing_sequence ?? "None"}
-              </dd>
-            </div>
-            <div>
-              <dt>Failure reason</dt>
-              <dd className="mt-1 font-medium text-foreground">
-                {result.reason?.replaceAll("_", " ") ?? "None"}
-              </dd>
-            </div>
-            <div>
-              <dt>Checkpoint</dt>
-              <dd className="mt-1 font-medium text-foreground">
-                {result.checkpoint_comparison.replaceAll("_", " ")}
-              </dd>
-            </div>
-            <div>
-              <dt>Head sequence</dt>
-              <dd className="mt-1 font-medium text-foreground">{result.checkpoint.sequence}</dd>
-            </div>
-          </dl>
-        ) : null}
-        {result?.status === "INVALID" ? (
-          <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-            Critical chain integrity failure remains open for review.
-          </p>
-        ) : null}
+        {result ? <ChainVerificationDetails result={result} /> : null}
       </CardContent>
     </Card>
   );

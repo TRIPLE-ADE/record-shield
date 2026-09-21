@@ -14,6 +14,87 @@ import { SecuritySummary } from "./security-summary";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+function getChainStatus(
+  result?: ChainVerification,
+  unknown?: boolean,
+): "valid" | "invalid" | "unknown" | "idle" {
+  if (result) {
+    return result.status === "VALID" ? "valid" : "invalid";
+  }
+  if (unknown) {
+    return "unknown";
+  }
+  return "idle";
+}
+
+function getAlertCounts(items?: { severity: string; status: string }[]) {
+  if (!items) {
+    return { openAlerts: 0, criticalCount: 0 };
+  }
+  const open = items.filter((alert) => !alert.status.startsWith("RESOLVED"));
+  return {
+    openAlerts: open.length,
+    criticalCount: open.filter((alert) => alert.severity === "CRITICAL").length,
+  };
+}
+
+function SecurityViewTabs({
+  view,
+  onSelectView,
+  streamId,
+}: {
+  view: "alerts" | "events";
+  onSelectView: (view: "alerts" | "events") => void;
+  streamId: string;
+}) {
+  return (
+    <CardContent className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 p-3">
+      <div
+        className="flex items-center gap-1 rounded-lg bg-muted/55 p-1"
+        role="tablist"
+        aria-label="Security evidence views"
+      >
+        <Button
+          variant={view === "alerts" ? "secondary" : "ghost"}
+          size="sm"
+          role="tab"
+          aria-selected={view === "alerts"}
+          onClick={() => onSelectView("alerts")}
+        >
+          Alert queue
+        </Button>
+        <Button
+          variant={view === "events" ? "secondary" : "ghost"}
+          size="sm"
+          role="tab"
+          aria-selected={view === "events"}
+          onClick={() => onSelectView("events")}
+        >
+          Event stream
+        </Button>
+      </div>
+      <span className="text-xs text-muted-foreground">Stream {streamId.slice(0, 8)}…</span>
+    </CardContent>
+  );
+}
+
+function SecurityEvidenceTable({
+  view,
+  alerts,
+  events,
+  canReview,
+}: {
+  view: "alerts" | "events";
+  alerts: ReturnType<typeof useSecurityAlerts>;
+  events: ReturnType<typeof useSecurityEvents>;
+  canReview: boolean;
+}) {
+  if (view === "alerts") {
+    return <SecurityAlertTable alerts={alerts.data?.items ?? []} canReview={canReview} />;
+  }
+  return <SecurityEventTable events={events.data?.items ?? []} />;
+}
+
 export function SecurityDashboard({ context }: { context: SessionContext }) {
   const streamId = context.security_stream_id ?? "";
   const [view, setView] = useState<"alerts" | "events">("alerts");
@@ -23,13 +104,9 @@ export function SecurityDashboard({ context }: { context: SessionContext }) {
   const [chainUnknown, setChainUnknown] = useState(false);
   const events = useSecurityEvents(streamId || undefined, eventFilters);
   const alerts = useSecurityAlerts(streamId || undefined, alertFilters);
-  const openAlerts =
-    alerts.data?.items.filter((alert) => !alert.status.startsWith("RESOLVED")).length ?? 0;
-  const criticalCount =
-    alerts.data?.items.filter(
-      (alert) => alert.severity === "CRITICAL" && !alert.status.startsWith("RESOLVED"),
-    ).length ?? 0;
+  const { openAlerts, criticalCount } = getAlertCounts(alerts.data?.items);
   const sourceName = context.role === "TRUST_OPERATOR" ? undefined : context.organization?.name;
+  const canReview = context.role === "SECURITY_ADMIN" || context.role === "TRUST_OPERATOR";
 
   return (
     <main
@@ -42,15 +119,7 @@ export function SecurityDashboard({ context }: { context: SessionContext }) {
           eventCount={events.data?.items.length ?? 0}
           alertCount={openAlerts}
           criticalCount={criticalCount}
-          chainStatus={
-            chainResult
-              ? chainResult.status === "VALID"
-                ? "valid"
-                : "invalid"
-              : chainUnknown
-                ? "unknown"
-                : "idle"
-          }
+          chainStatus={getChainStatus(chainResult, chainUnknown)}
         />
         <ChainVerificationCard
           streamId={streamId}
@@ -61,33 +130,7 @@ export function SecurityDashboard({ context }: { context: SessionContext }) {
           onUnknown={() => setChainUnknown(true)}
         />
         <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 p-3">
-            <div
-              className="flex items-center gap-1 rounded-lg bg-muted/55 p-1"
-              role="tablist"
-              aria-label="Security evidence views"
-            >
-              <Button
-                variant={view === "alerts" ? "secondary" : "ghost"}
-                size="sm"
-                role="tab"
-                aria-selected={view === "alerts"}
-                onClick={() => setView("alerts")}
-              >
-                Alert queue
-              </Button>
-              <Button
-                variant={view === "events" ? "secondary" : "ghost"}
-                size="sm"
-                role="tab"
-                aria-selected={view === "events"}
-                onClick={() => setView("events")}
-              >
-                Event stream
-              </Button>
-            </div>
-            <span className="text-xs text-muted-foreground">Stream {streamId.slice(0, 8)}…</span>
-          </CardContent>
+          <SecurityViewTabs view={view} onSelectView={setView} streamId={streamId} />
           <CardContent className="space-y-4 p-4 sm:p-5">
             <SecurityFilters
               view={view}
@@ -100,14 +143,12 @@ export function SecurityDashboard({ context }: { context: SessionContext }) {
                 setAlertFilters({});
               }}
             />
-            {view === "alerts" ? (
-              <SecurityAlertTable
-                alerts={alerts.data?.items ?? []}
-                canReview={context.role === "SECURITY_ADMIN" || context.role === "TRUST_OPERATOR"}
-              />
-            ) : (
-              <SecurityEventTable events={events.data?.items ?? []} />
-            )}
+            <SecurityEvidenceTable
+              view={view}
+              alerts={alerts}
+              events={events}
+              canReview={canReview}
+            />
           </CardContent>
         </Card>
       </section>
