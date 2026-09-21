@@ -1,12 +1,24 @@
 import { expect, test } from "@playwright/test";
 
-test("root sends unauthenticated users to sign in", async ({ page }) => {
+test("public landing page explains the product and opens sign in", async ({ page }) => {
   await page.goto("/");
+  await expect(page).toHaveTitle("RecordShield — Connected care. Accountable access.");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Care moves.");
+  await page.getByText("Do we need to replace our hospital software?", { exact: true }).click();
+  await expect(page.getByText(/RecordShield is designed for two paths/)).toBeVisible();
+  await page.getByRole("link", { name: "Explore the product", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page).toHaveTitle("RecordShield · Clinical trust layer");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "The right records.At the point of care.",
+});
+
+test("landing page fits a mobile screen and keeps sign in available", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
   );
+  await page.getByRole("link", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
 });
 
 test("requires an authenticated context before showing the workspace", async ({ page }) => {

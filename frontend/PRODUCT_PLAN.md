@@ -77,3 +77,9 @@ Implement and verify one complete workflow at a time. Update this file with actu
 - No additional API contract change was required for this milestone; it uses the existing patient-context and record-write contracts.
 - Verified: lint, formatting, TypeScript, 55 component/API tests, all 14 Playwright journeys and fresh production build. React Doctor 92/100; three existing screen-complexity warnings reviewed, no suppressions.
 - Next implementation milestone: registration and start/resume/close visit flows, with authorized ward/staff choices and contract-first API additions.
+
+## Public product introduction
+
+Added a public homepage at `/` with the two deployment paths, everyday care, patient consent, emergency safeguards, FAQs and links to the existing sign-in flow. The preview uses fictional data and is identified as such; no customer, compliance, pricing or deployment claims are invented. No API change required.
+
+Landing-page verification: visually reviewed the desktop preview; all 15 browser journeys passed, including mobile layout, FAQ disclosure and sign-in navigation, against a fresh production build. Lint, formatting and TypeScript passed. React Doctor remains 92/100 with no new findings.
