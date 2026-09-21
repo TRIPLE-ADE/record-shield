@@ -8,11 +8,13 @@ export const dependencyLabels: Record<DemoDependency, string> = {
   UNRESOLVED_TRANSACTION: "Transaction state",
 };
 
+const dateTimeFormatter = new Intl.DateTimeFormat("en", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 export function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+  return dateTimeFormatter.format(new Date(value));
 }
 
 export function toDateTimeLocal(value: Date) {

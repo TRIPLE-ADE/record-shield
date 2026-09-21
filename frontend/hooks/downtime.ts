@@ -14,8 +14,10 @@ export const downtimeKeys = {
 };
 
 export function useCreateDowntimeReconciliation() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: DowntimeReconciliationCreate) => createDowntimeReconciliation(input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: downtimeKeys.all }),
   });
 }
 
