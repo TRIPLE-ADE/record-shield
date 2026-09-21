@@ -23,9 +23,9 @@ export function PatientContextCard({ context }: { context: SessionContext }) {
         <CardHeader className="px-5 py-5 sm:px-6">
           <CardTitle className="flex items-center gap-2 text-lg">
             <LockKeyIcon aria-hidden="true" className="size-5 text-primary" weight="duotone" />
-            Current patient context
+            Current patient
           </CardTitle>
-          <CardDescription>No patient is attached to this security context.</CardDescription>
+          <CardDescription>No patient is selected.</CardDescription>
         </CardHeader>
       </Card>
     );
@@ -40,17 +40,17 @@ export function PatientContextCard({ context }: { context: SessionContext }) {
               <UserCircleIcon aria-hidden="true" className="size-5 text-primary" weight="duotone" />
               My current patient
             </CardTitle>
-            <CardDescription>Resolved from the active local encounter context.</CardDescription>
+            <CardDescription>Patient details for the current visit.</CardDescription>
           </div>
           <DatabaseIcon aria-hidden="true" className="size-5 text-primary/70" weight="duotone" />
         </div>
       </CardHeader>
       <CardContent className="px-5 py-5 sm:px-6">
         {query.isPending ? (
-          <p className="text-sm text-muted-foreground">Checking the current patient context…</p>
+          <p className="text-sm text-muted-foreground">Loading patient details…</p>
         ) : query.error ? (
           <p className="text-sm text-muted-foreground">
-            The current patient cannot be displayed in this context.
+            Patient details are currently unavailable.
           </p>
         ) : (
           <>

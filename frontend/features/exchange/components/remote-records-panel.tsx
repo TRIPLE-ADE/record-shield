@@ -25,7 +25,7 @@ export function RemoteRecordsPanel({
           Approved remote records
         </CardTitle>
         <CardDescription>
-          Read-only records are released only after the exact grant is active.
+          View the records the patient has approved for you to access.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-5 pb-5 sm:px-6">
@@ -33,10 +33,10 @@ export function RemoteRecordsPanel({
           <ExchangeState
             kind="empty"
             title="Waiting for patient approval"
-            description="No remote clinical payload is available before a matching grant is active."
+            description="Select approved access above, or send a request to the patient to share records."
             compact
           />
-        ) : remote.isPending ? (
+        ) : remote.isPending || remote.isFetching ? (
           <Skeleton className="h-32 rounded-xl" />
         ) : remote.error ? (
           <ExchangeError error={remote.error} />
@@ -48,7 +48,7 @@ export function RemoteRecordsPanel({
                 {activeGrant.source.name}
               </span>
               <span className="text-muted-foreground">
-                Grant {activeGrant.domains.map(formatDomain).join(" · ")}
+                Records: {activeGrant.domains.map(formatDomain).join(" · ")}
               </span>
             </div>
             {remote.data?.items.map((record) => (
@@ -58,7 +58,7 @@ export function RemoteRecordsPanel({
               <ExchangeState
                 kind="empty"
                 title="No approved records returned"
-                description="The source has no records in the approved domains."
+                description="No records were returned for this access request. Information may be unavailable or protected; this does not confirm the absence of a condition."
                 compact
               />
             ) : null}

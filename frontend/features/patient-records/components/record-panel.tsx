@@ -26,7 +26,7 @@ export function RecordPanel({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-            Local record set
+            Patient records
           </p>
           <h2 className="mt-2 font-heading text-2xl font-semibold tracking-tight">
             {domainMeta[selectedDomain].label}
@@ -36,7 +36,7 @@ export function RecordPanel({
           <ClockIcon aria-hidden="true" className="size-4" />
           {selected.data?.retrieved_at
             ? `Retrieved ${formatRecordDate(selected.data.retrieved_at)}`
-            : "Requesting current view"}
+            : "Loading records"}
         </div>
       </div>
 

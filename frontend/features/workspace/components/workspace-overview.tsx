@@ -1,154 +1,103 @@
 "use client";
 
-import {
-  ArrowClockwiseIcon,
-  CheckCircleIcon,
-  ClockCountdownIcon,
-  DatabaseIcon,
-  LockKeyIcon,
-  PulseIcon,
-  ShieldCheckIcon,
-} from "@phosphor-icons/react";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { ArrowClockwiseIcon, ArrowRightIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatRole, formatTime, humanizePermission } from "../utils/format";
+import { formatRole, formatTime } from "../utils/format";
 import type { WorkspaceOverviewProps } from "../types";
-import { ContextItem } from "./context-item";
-import { NextStepCard } from "./next-step-card";
-import { PatientContextCard } from "./patient-context-card";
+import { AssignedPatients } from "./assigned-patients";
+import { AccessRequestList } from "@/features/access-requests/components/access-request-list";
+import { isTreatingPractitioner } from "@/utils/authorization";
 
 export function WorkspaceOverview({ context, isFetching, onRefresh }: WorkspaceOverviewProps) {
-  const firstName = context.user.username.split(".")[0];
-
+  const canRead = context.permissions_summary.includes("local_records.read_with_context");
+  const canRequest = isTreatingPractitioner(context.role);
+  const security = context.role === "SECURITY_ADMIN" || context.role === "TRUST_OPERATOR";
   return (
     <main
       id="main-content"
-      className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10"
+      className="mx-auto w-full max-w-7xl space-y-7 px-4 py-7 sm:px-6 lg:px-10"
     >
-      <section className="flex flex-col justify-between gap-5 border-b border-border/70 pb-8 sm:flex-row sm:items-end">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Overview</p>
-          <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
-            Good to see you, {firstName}.
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-            Your protected workspace is ready. The context below came from the current session and
-            will be rechecked before protected records are released.
+          <p className="text-sm text-muted-foreground">
+            {context.organization?.name ?? "RecordShield"} <span aria-hidden="true">/</span>{" "}
+            {formatRole(context.role)}
+          </p>
+          <h1 className="mt-2 font-heading text-3xl font-semibold tracking-tight">Home</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {security
+              ? "Review access activity and keep your organisation running safely."
+              : "Pick up patient care and keep record requests moving."}
           </p>
         </div>
-        <Button variant="outline" onClick={onRefresh} disabled={isFetching}>
+        <Button variant="outline" size="sm" onClick={onRefresh} disabled={isFetching}>
           <ArrowClockwiseIcon aria-hidden="true" className={isFetching ? "animate-spin" : ""} />
-          Refresh context
+          Refresh
         </Button>
-      </section>
-
-      <section className="grid gap-5 py-7 lg:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]">
-        <Card className="border-primary/20 bg-primary/4.5 shadow-sm">
-          <CardHeader className="border-b border-primary/12 px-5 py-5 sm:px-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <ShieldCheckIcon
-                    aria-hidden="true"
-                    className="size-5 text-primary"
-                    weight="duotone"
-                  />
-                  Current access context
-                </CardTitle>
-                <CardDescription className="mt-1.5">
-                  Informational context from the server. It is never a permission by itself.
-                </CardDescription>
-              </div>
-              <Badge className="bg-success/12 text-success">Verified</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-5 px-5 py-5 sm:grid-cols-2 sm:px-6">
-            <ContextItem
-              label="Identity"
-              value={context.user.username}
-              detail={context.user.kind}
-            />
-            <ContextItem
-              label="Role"
-              value={formatRole(context.role)}
-              detail={context.membership_id ? "Active membership" : "No membership"}
-            />
-            <ContextItem
-              label="Hospital"
-              value={context.organization?.name ?? "Patient portal"}
-              detail={
-                context.organization?.mode === "LITE" ? "RecordShield Lite EMR" : "Existing EMR"
-              }
-            />
-            <ContextItem
-              label="Shift"
-              value={context.shift?.active ? "Active now" : "No active shift"}
-              detail={
-                context.shift
-                  ? `${formatTime(context.shift.starts_at)} – ${formatTime(context.shift.ends_at)}`
-                  : "No duty window returned"
-              }
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="px-5 py-5 sm:px-6">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <LockKeyIcon aria-hidden="true" className="size-5 text-primary" weight="duotone" />
-              Session guardrails
-            </CardTitle>
-            <CardDescription>What this session is prepared to request.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3 px-5 pb-5 sm:px-6">
-            {context.permissions_summary.length ? (
-              context.permissions_summary.map((permission) => (
-                <div key={permission} className="flex items-center gap-2 text-sm">
-                  <CheckCircleIcon
-                    aria-hidden="true"
-                    className="size-4 text-success"
-                    weight="duotone"
-                  />
-                  <span>{humanizePermission(permission)}</span>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No staff permissions are attached to this session.
-              </p>
-            )}
-            <div className="mt-4 border-t border-border/70 pt-4 text-xs leading-5 text-muted-foreground">
-              A permission summary describes possible actions. Each patient decision is evaluated
-              again at the protected request.
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <PatientContextCard context={context} />
-
-      <section className="grid gap-4 sm:grid-cols-3">
-        <NextStepCard
-          icon={<DatabaseIcon aria-hidden="true" />}
-          eyebrow="Current encounter"
-          title="Local records"
-          copy="Open the patient context returned for this session and review local records."
-          href={context.patient_id ? `/workspace/patients/${context.patient_id}` : undefined}
-        />
-        <NextStepCard
-          icon={<PulseIcon aria-hidden="true" />}
-          eyebrow="Protected later"
-          title="Exchange and consent"
-          copy="Cross-hospital discovery stays behind explicit purpose, scope, and patient approval."
-        />
-        <NextStepCard
-          icon={<ClockCountdownIcon aria-hidden="true" />}
-          eyebrow="Evidence"
-          title="Session timing"
-          copy="Idle and absolute expiry are server decisions; this view never extends the session."
-        />
-      </section>
+      </header>
+      {context.shift ? (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-border bg-card px-4 py-3 text-sm">
+          <span className="font-medium">{context.shift.active ? "On duty" : "Off duty"}</span>
+          <span className="text-muted-foreground">
+            Shift {formatTime(context.shift.starts_at)} – {formatTime(context.shift.ends_at)}
+          </span>
+          <span className="ml-auto text-xs text-muted-foreground">{context.user.username}</span>
+        </div>
+      ) : null}
+      {canRead ? <AssignedPatients context={context} /> : null}
+      {canRequest ? (
+        <section
+          aria-labelledby="requests-heading"
+          className="rounded-xl border border-border bg-card"
+        >
+          <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+            <h2 id="requests-heading" className="font-semibold">
+              Your access requests
+            </h2>
+            <Link
+              href="/workspace/requests"
+              className="inline-flex items-center gap-2 text-sm font-medium text-primary"
+            >
+              View requests
+              <ArrowRightIcon aria-hidden="true" />
+            </Link>
+          </div>
+          <AccessRequestList compact />
+        </section>
+      ) : null}
+      {security ? (
+        <section className="grid gap-4 sm:grid-cols-2" aria-label="Administration tasks">
+          <Link
+            href="/workspace/security"
+            className="rounded-xl border border-border bg-card p-6 transition-colors hover:border-primary"
+          >
+            <h2 className="text-lg font-semibold">Review security activity</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Investigate alerts, review access events, and verify audit evidence.
+            </p>
+            <span className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-primary">
+              Open security
+              <ArrowRightIcon aria-hidden="true" />
+            </span>
+          </Link>
+          <Link
+            href="/workspace/security/admin"
+            className="rounded-xl border border-border bg-card p-6 transition-colors hover:border-primary"
+          >
+            <h2 className="text-lg font-semibold">Manage access</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              {context.role === "TRUST_OPERATOR"
+                ? "Manage participating organisations and access suspensions."
+                : "Maintain staff assignments, disclosure policies, and membership access."}
+            </p>
+            <span className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-primary">
+              Open administration
+              <ArrowRightIcon aria-hidden="true" />
+            </span>
+          </Link>
+        </section>
+      ) : null}
     </main>
   );
 }

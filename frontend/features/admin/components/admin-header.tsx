@@ -23,8 +23,8 @@ export function AdminHeader({ organizationName }: { organizationName?: string })
             Administration
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Maintain duty context, emergency policy, and membership safety controls for this
-            authorized context.
+            Manage staff assignments, emergency access policies, and account access for your
+            hospital.
           </p>
         </div>
       </div>

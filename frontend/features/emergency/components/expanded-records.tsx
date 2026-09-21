@@ -27,15 +27,15 @@ export function ExpandedRecords({
       <CardHeader className="px-5 py-5 sm:px-6">
         <CardTitle className="flex items-center gap-2 text-lg">
           <ArrowRightIcon aria-hidden="true" className="size-5 text-primary" />
-          Level 2 records
+          Additional emergency records
         </CardTitle>
-        <CardDescription>Only the explicitly requested domains appear here.</CardDescription>
+        <CardDescription>Only the additional records you requested appear here.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 px-5 pb-6 sm:px-6">
         {isLoading ? <Skeleton className="h-24 rounded-xl" /> : null}
         {!isLoading && !records ? (
           <p className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-            No Level 2 domain has been requested.
+            No additional emergency records have been requested.
           </p>
         ) : null}
         {records?.items.map((record) => (

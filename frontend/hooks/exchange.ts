@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   approveConsent,
   cancelConsent,
@@ -40,9 +40,16 @@ export function useDiscoverSources(
 }
 
 export function useConsentRequests(patientId?: string, enabled = true) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: exchangeKeys.requests(patientId),
-    queryFn: () => listConsentRequests(patientId),
+    queryFn: ({ pageParam }) => listConsentRequests(patientId, { cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    select: (data) => ({
+      ...data.pages[0],
+      items: data.pages.flatMap((page) => page.items),
+      next_cursor: data.pages.at(-1)?.next_cursor ?? null,
+    }),
     enabled,
     staleTime: 5_000,
     gcTime: 5 * 60 * 1000,

@@ -22,6 +22,7 @@ next.config.ts                       -> redirect / to /login
 app/design-system/page.tsx           -> features/design-system
 app/(auth)/login/page.tsx            -> features/auth
 app/(workspace)/workspace/page.tsx   -> features/workspace
+app/(workspace)/workspace/patients/page.tsx -> features/patient-directory
 app/(workspace)/workspace/patients/[id]/page.tsx -> features/patient-records
 app/(workspace)/workspace/patients/[id]/exchange/page.tsx -> features/exchange
 app/(workspace)/workspace/patients/[id]/emergency/page.tsx -> features/emergency
@@ -42,6 +43,7 @@ hooks/
   security.ts
   admin.ts
   downtime.ts
+  patients.ts
 ```
 
 Feature folders own page composition, feature components, API functions, schemas, data, helpers, and colocated tests:
@@ -139,6 +141,8 @@ These decisions are accepted unless the user explicitly changes them:
 6. **Colocated verification:** feature tests live beside their feature; Playwright remains separate because it needs a running server.
 7. **Quality gates are repository conventions:** use Oxlint, Oxfmt, `tsgo`, Vitest Browser Mode, Playwright, and React Doctor before presenting a frontend change as complete.
 8. **Downtime is fail-closed:** source, consent, audit, malformed-source, and unresolved-transaction failures are rendered as explicit dependency states. Offline remote data is never served from a stale browser cache; a committed local write may surface `audit_sync_status=PENDING` while protected reads remain blocked.
+9. **Patient directory is a contract boundary:** workspace navigation opens a server-scoped patient collection, not a client-derived current-patient link. Directory entries are minimal identity and source context; detail routes still ask the API to authorize each patient before reading domains.
+10. **Production scope follows product requirements:** the current workspace, patient directory, protected records, exchange, emergency, security, administration, and downtime paths are the supported frontend scope. Do not add a speculative demo-only phase or route without a concrete product requirement.
 
 ## Required checks
 

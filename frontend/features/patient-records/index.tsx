@@ -28,7 +28,10 @@ export default function PatientRecordsPage({ patientId }: PatientRecordsPageProp
   const context = session.data;
   const purpose: RecordPurpose =
     context?.role === "CLERK_HEALTH_ATTENDANT" ? "administration" : "treatment";
-  const queryEnabled = Boolean(context?.organization && context.patient_id === patientId);
+  const queryEnabled = Boolean(
+    context?.organization &&
+    context.permissions_summary.includes("local_records.read_with_context"),
+  );
   const overview = useLocalRecords(patientId, "demographics", purpose, { enabled: queryEnabled });
   const selected = useLocalRecords(patientId, selectedDomain, purpose, { enabled: queryEnabled });
   const patientRecord = overview.data?.items.find((record) => record.domain === "demographics");
@@ -40,12 +43,22 @@ export default function PatientRecordsPage({ patientId }: PatientRecordsPageProp
 
   if (session.isPending) return <PatientRecordsLoading />;
   if (session.error instanceof ApiError && session.error.status === 401) redirect("/login");
-  if (!context || context.patient_id !== patientId || !context.organization) {
+  if (!context || !context.organization || !queryEnabled) {
     return (
       <PatientRecordsState
         kind="denied"
-        title="Patient context unavailable"
-        description="This patient is not part of the current signed-in context."
+        title="Patient records are restricted"
+        description="Your current role or care assignment does not allow you to view these records."
+      />
+    );
+  }
+
+  if (overview.error instanceof ApiError && overview.error.status === 404) {
+    return (
+      <PatientRecordsState
+        kind="denied"
+        title="Patient record unavailable"
+        description="This record is unavailable or you do not have permission to view it."
       />
     );
   }
@@ -67,8 +80,8 @@ export default function PatientRecordsPage({ patientId }: PatientRecordsPageProp
         context={authenticatedContext}
         sourceName={source?.name}
         sourceMode={source?.mode}
-        canExchange={isTreatingPractitioner(context.role)}
-        canEmergency={canActivateEmergency(context)}
+        canExchange={isTreatingPractitioner(context.role) && context.patient_id === patientId}
+        canEmergency={canActivateEmergency(context) && context.patient_id === patientId}
       />
       <section className="mt-7 grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)]">
         <RecordDomainNavigation selectedDomain={selectedDomain} onSelect={setSelectedDomain} />

@@ -38,7 +38,7 @@ export function AssignmentList({ assignments }: { assignments: ContextAssignment
         data,
       } as AssignmentUpsert,
       {
-        onSuccess: () => toast.success("Duty context updated"),
+        onSuccess: () => toast.success("Staff assignment updated"),
         onError: (error) =>
           toast.error(error instanceof Error ? error.message : "Assignment could not be updated."),
       },
@@ -48,11 +48,11 @@ export function AssignmentList({ assignments }: { assignments: ContextAssignment
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <ClockIcon aria-hidden="true" className="size-4 text-primary" weight="duotone" /> Duty
-          context
+          <ClockIcon aria-hidden="true" className="size-4 text-primary" weight="duotone" /> Staff
+          assignments
         </CardTitle>
         <CardDescription>
-          Review the editable assignments that shape a clinician’s current authorization.
+          Manage the shifts, wards, and patients assigned to each member of staff.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -84,7 +84,7 @@ export function AssignmentList({ assignments }: { assignments: ContextAssignment
                   onClick={() => extend(assignment)}
                   disabled={mutation.isPending}
                 >
-                  <PencilSimpleIcon aria-hidden="true" /> Extend context
+                  <PencilSimpleIcon aria-hidden="true" /> Extend assignment
                 </Button>
               </article>
             ))}

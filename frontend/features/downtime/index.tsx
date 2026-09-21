@@ -23,7 +23,7 @@ export default function DowntimePage() {
     return (
       <DowntimeState
         title="Loading resilience controls"
-        description="Checking the current security context."
+        description="Checking your account permissions."
         kind="unavailable"
       />
     );
@@ -48,22 +48,28 @@ export default function DowntimePage() {
             Resilience
           </p>
           <h1 className="mt-3 font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
-            Downtime and demo hardening
+            Downtime recovery
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
-            Keep protected reads fail-closed while recovery metadata remains attributable and
-            retryable.
+            Reconcile paper records after an interruption and track recovery readiness.
           </p>
         </div>
         <p className="text-sm text-muted-foreground">{session.data.organization.name}</p>
       </header>
 
       <DependencyStatus demoStatus={demoStatus.data} />
-      {isDemo && demoStatus.data ? <DemoControls status={demoStatus.data} /> : null}
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]">
+      <div className="max-w-3xl">
         <ReconciliationForm patientId={session.data.patient_id} />
-        <RehearsalPanel />
       </div>
+      {isDemo && demoStatus.data ? (
+        <details className="rounded-xl border border-dashed border-border p-5">
+          <summary className="cursor-pointer text-sm font-medium">Demo rehearsal tools</summary>
+          <div className="mt-5 space-y-5">
+            <DemoControls status={demoStatus.data} />
+            <RehearsalPanel />
+          </div>
+        </details>
+      ) : null}
       {demoStatus.error && isDemo ? (
         <p className="text-xs text-muted-foreground">
           Demo controls are unavailable; the protected workflow remains usable.

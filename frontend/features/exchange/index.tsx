@@ -24,8 +24,8 @@ export default function ExchangePage({ patientId }: ExchangePageProps) {
     return (
       <ExchangeState
         kind="denied"
-        title="Exchange context unavailable"
-        description="The current session is not linked to this patient."
+        title="Record sharing unavailable"
+        description="This patient is not available for record sharing through your current account."
       />
     );
   }
@@ -34,7 +34,7 @@ export default function ExchangePage({ patientId }: ExchangePageProps) {
       <ExchangeState
         kind="denied"
         title="Exchange is limited to treating practitioners"
-        description="This role can continue with local records in its current context."
+        description="You can continue viewing the local records available to your role."
       />
     );
   }

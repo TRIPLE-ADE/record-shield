@@ -12,8 +12,8 @@ export default function SecurityPage() {
   if (!session.data) {
     return (
       <SecurityState
-        title="Security context unavailable"
-        description="Sign in with an authorized security or trust-operator context to view this stream."
+        title="Security activity unavailable"
+        description="Sign in with a security administrator or network operator account to view this activity."
       />
     );
   }
@@ -24,7 +24,7 @@ export default function SecurityPage() {
     return (
       <SecurityState
         title="Security evidence is restricted"
-        description="Your current work context does not include security stream access."
+        description="Your account does not have permission to view security activity."
       />
     );
   }

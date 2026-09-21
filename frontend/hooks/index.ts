@@ -35,6 +35,7 @@ export {
   useLocalRecords,
   type RecordPurpose,
 } from "./patient-records";
+export { patientDirectoryKeys, usePatientDirectory } from "./patients";
 export {
   downtimeKeys,
   useCreateDowntimeReconciliation,

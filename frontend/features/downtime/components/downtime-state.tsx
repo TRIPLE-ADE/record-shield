@@ -28,7 +28,7 @@ export function DowntimeState({
               href="/workspace"
               className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
             >
-              Return to workspace
+              Return home
               <ArrowRightIcon aria-hidden="true" className="size-4" />
             </Link>
           </div>

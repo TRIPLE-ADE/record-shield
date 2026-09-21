@@ -5,7 +5,7 @@ test("root sends unauthenticated users to sign in", async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/);
   await expect(page).toHaveTitle("RecordShield · Clinical trust layer");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Start with the person, then the permission.",
+    "The right records.At the point of care.",
   );
 });
 
@@ -13,28 +13,31 @@ test("requires an authenticated context before showing the workspace", async ({ 
   await page.goto("/workspace");
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Start with the person, then the permission.",
+    "The right records.At the point of care.",
   );
 });
 
 test("signs in with a seeded identity and renders server context", async ({ page }) => {
   await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
   await page.getByRole("button", { name: "Amina Yusuf" }).click();
-  await page.getByRole("button", { name: "Enter workspace" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL(/\/workspace$/);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Good to see you/);
-  await expect(page.locator("#main-content").getByText("Unity Medical")).toBeVisible();
-  await expect(page.locator("#main-content").getByText("Emergency Doctor")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Home");
+  await expect(
+    page.locator("#main-content").getByText("Unity Medical / Emergency Doctor"),
+  ).toBeVisible();
 });
 
 test("opens the current patient context and writes a local nursing note", async ({ page }) => {
   await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
   await page.getByRole("button", { name: "Grace Okafor" }).click();
-  await page.getByRole("button", { name: "Enter workspace" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/workspace$/);
 
-  await page.getByRole("link", { name: "Open current encounter" }).click();
+  await page.getByRole("link", { name: "Open records for Musa Ibrahim" }).click();
   await expect(page).toHaveURL(/\/workspace\/patients\//);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Musa Ibrahim");
   await expect(page.getByText("HSP-99210 · Unity Medical")).toBeVisible();
@@ -50,52 +53,76 @@ test("opens the current patient context and writes a local nursing note", async 
   ).toBeVisible();
 });
 
+test("lists every patient assigned to the active care context", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
+  await page.getByRole("button", { name: "Grace Okafor" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "Patients", exact: true }).click();
+
+  await expect(page).toHaveURL(/\/workspace\/patients$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("My patients");
+  await expect(page.getByText("Musa Ibrahim")).toBeVisible();
+  await expect(page.getByText("Ada Nwosu")).toBeVisible();
+
+  await page
+    .locator("article")
+    .filter({ hasText: "Ada Nwosu" })
+    .getByRole("link", { name: "Open records" })
+    .click();
+  await expect(page).toHaveURL(/\/workspace\/patients\/00000000-0000-4000-8000-000000000024$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Ada Nwosu");
+  await expect(page.getByText("HSP-99211 · Unity Medical")).toBeVisible();
+});
+
 test("activates a bounded emergency summary and requests one explicit domain", async ({ page }) => {
   await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
   await page.getByRole("button", { name: "Amina Yusuf" }).click();
-  await page.getByRole("button", { name: "Enter workspace" }).click();
-  await page.getByRole("link", { name: "Open current encounter" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "Open records for Musa Ibrahim" }).click();
   await page.getByRole("link", { name: "Open emergency summary" }).click();
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Activate a bounded patient summary",
+    "Open an emergency patient summary",
   );
   await page.getByLabel("Source facility").selectOption("00000000-0000-4000-8000-000000000002");
   await page.getByRole("checkbox", { name: /I confirm this is necessary now/ }).check();
   await page.getByRole("button", { name: "Activate emergency summary" }).click();
 
-  await expect(page.getByRole("heading", { name: "Bounded clinical summary" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Emergency patient summary" })).toBeVisible();
   await expect(page.getByText(/Penicillin — Rash; moderate; active/)).toBeVisible();
-  await page.getByRole("button", { name: "Choose Level 2 domains" }).click();
+  await page.getByRole("button", { name: "Choose additional records" }).click();
   await page.getByRole("checkbox", { name: "Allergies" }).check();
   await page
     .getByLabel("Why is this needed for immediate treatment?")
     .fill("Confirm the recorded allergy before selecting an immediate medication.");
-  await page.getByRole("button", { name: "Request Level 2 access" }).click();
-  await expect(page.getByText("Level 2 records")).toBeVisible();
+  await page.getByRole("button", { name: "Request additional access" }).click();
+  await expect(page.getByText("Additional emergency records")).toBeVisible();
 });
 
 test("completes a patient-approved source exchange", async ({ page }) => {
   await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
   await page.getByRole("button", { name: "Amina Yusuf" }).click();
-  await page.getByRole("button", { name: "Enter workspace" }).click();
-  await page.getByRole("link", { name: "Open current encounter" }).click();
-  await page.getByRole("link", { name: "Request source access" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "Open records for Musa Ibrahim" }).click();
+  await page.getByRole("link", { name: "Request records" }).click();
 
   await page.getByRole("button", { name: "Select Mercy General" }).click();
   await page.getByRole("checkbox", { name: "Allergies" }).click();
   await page
-    .getByRole("textbox", { name: "Patient-visible reason" })
+    .getByRole("textbox", { name: "Reason for this request" })
     .fill("Review source allergies before confirming the current treatment plan.");
-  await page.getByRole("button", { name: "Send consent request" }).click();
+  await page.getByRole("button", { name: "Send request" }).click();
   await expect(page.getByRole("button", { name: "Cancel request" }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
+  await page.getByText("Explore with a sample account").click();
   await page.getByRole("button", { name: "Musa Ibrahim" }).click();
-  await page.getByRole("button", { name: "Enter workspace" }).click();
-  await expect(page).toHaveURL(/\/workspace$/);
-  await page.goto("/portal");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/portal$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/Review who can access/);
   const pendingRequest = page
     .locator("form")
@@ -107,18 +134,20 @@ test("completes a patient-approved source exchange", async ({ page }) => {
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
+  await page.getByText("Explore with a sample account").click();
   await page.getByRole("button", { name: "Amina Yusuf" }).click();
-  await page.getByRole("button", { name: "Enter workspace" }).click();
-  await page.getByRole("link", { name: "Open current encounter" }).click();
-  await page.getByRole("link", { name: "Request source access" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "Open records for Musa Ibrahim" }).click();
+  await page.getByRole("link", { name: "Request records" }).click();
   await expect(page.getByText(/Penicillin/)).toBeVisible();
   await expect(page.getByText("Read only")).toBeVisible();
 });
 
-test("logout clears the protected workspace", async ({ page }) => {
+test("logout clears the care team account", async ({ page }) => {
   await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
   await page.getByRole("button", { name: "John Mensah" }).click();
-  await page.getByRole("button", { name: "Enter workspace" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL(/\/workspace$/);
 
   await page.getByRole("button", { name: "Sign out" }).click();
@@ -127,28 +156,33 @@ test("logout clears the protected workspace", async ({ page }) => {
 
 test("security administrator reviews stream evidence", async ({ page }) => {
   await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
   await page.getByRole("button", { name: "Sarah Bello" }).click();
-  await page.getByRole("button", { name: "Enter workspace" }).click();
-  await page.getByRole("link", { name: "Security evidence" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "Security", exact: true }).click();
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Security evidence");
   await expect(page.getByText("EMERGENCY ACTIVATED")).toBeVisible();
   await page.getByRole("button", { name: "Verify chain" }).click();
   await expect(page.getByText("VALID")).toBeVisible();
-  await page.getByRole("link", { name: "Administration" }).click();
+  await page
+    .getByRole("navigation", { name: "Main navigation", exact: true })
+    .getByRole("link", { name: "Administration" })
+    .click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Administration");
   await expect(page.getByText("Emergency policy", { exact: true })).toBeVisible();
 });
 
 test("security administrator can open downtime resilience controls", async ({ page }) => {
   await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
   await page.getByRole("button", { name: "Sarah Bello" }).click();
-  await page.getByRole("button", { name: "Enter workspace" }).click();
-  await page.getByRole("link", { name: "Downtime & rehearsal" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "Downtime", exact: true }).click();
 
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Downtime and demo hardening");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Downtime recovery");
   await expect(page.getByText("Dependency readiness")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Reconcile a paper form" })).toBeVisible();
+  await expect(page.getByText("Reconcile a paper form", { exact: true })).toBeVisible();
 });
 
 test("design system is development-only", async ({ page }) => {
@@ -184,4 +218,31 @@ test("restricted disclosure requires a necessity narrative", async ({ page }) =>
   await expect(
     page.getByText("Restricted scope request staged for patient approval."),
   ).toBeVisible();
+});
+
+test("mobile navigation opens patients and access requests without horizontal overflow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/login");
+  await page.getByText("Explore with a sample account").click();
+  await page.getByRole("button", { name: "Amina Yusuf" }).click();
+  await page.getByRole("button", { name: "Sign in" }).click();
+  const navigation = page.getByRole("navigation", {
+    name: "Mobile navigation",
+    exact: true,
+  });
+  await navigation.getByRole("link", { name: "Patients", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "My patients" })).toBeVisible();
+  await page.getByRole("textbox", { name: "Search patients" }).fill("Ada");
+  await expect(page.getByText("Ada Nwosu")).toBeVisible();
+  await expect(page.getByText("Musa Ibrahim")).not.toBeVisible();
+  await navigation.getByRole("link", { name: "Access requests", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Access requests" })).toBeVisible();
+  await expect(
+    navigation.getByRole("link", { name: "Access requests", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
 });

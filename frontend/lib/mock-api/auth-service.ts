@@ -88,6 +88,10 @@ import {
   type DowntimeReconciliationResponse,
 } from "@/lib/api/contracts/downtime";
 import {
+  patientDirectoryCollectionSchema,
+  type PatientDirectoryEntry,
+} from "@/lib/api/contracts/patients";
+import {
   demoFaultUpdateSchema,
   demoStatusSchema,
   type DemoDependency,
@@ -99,6 +103,9 @@ import {
   DEMO_MERCY_ORGANIZATION_ID,
   DEMO_MERCY_WARD_ID,
   DEMO_PATIENT_ID,
+  DEMO_SECOND_MERCY_ENCOUNTER_ID,
+  DEMO_SECOND_PATIENT_ID,
+  DEMO_SECOND_UNITY_ENCOUNTER_ID,
   DEMO_UNITY_ENCOUNTER_ID,
   DEMO_UNITY_ORGANIZATION_ID,
   DEMO_UNITY_WARD_ID,
@@ -270,6 +277,10 @@ function syntheticDigest(seed: string) {
 }
 
 export class MockAuthService {
+  private readonly collectionCursors = new Map<
+    string,
+    { scope: string; offset: number; expires: number }
+  >();
   private readonly preAuth = new Map<string, PreAuthRecord>();
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly mutations = new Map<string, StoredMutation>();
@@ -315,6 +326,7 @@ export class MockAuthService {
   }
 
   reset() {
+    this.collectionCursors.clear();
     this.preAuth.clear();
     this.sessions.clear();
     this.mutations.clear();
@@ -463,6 +475,10 @@ export class MockAuthService {
 
     if (request.method === "GET" && path === "/me") {
       return this.handleMe(request, now);
+    }
+
+    if (request.method === "GET" && path === "/patients") {
+      return this.handleListPatients(request, now);
     }
 
     const localRecordsMatch = path.match(/^\/patients\/([^/]+)\/records\/([^/]+)$/);
@@ -1240,6 +1256,122 @@ export class MockAuthService {
     return success(200, this.buildContext(identity, session, now));
   }
 
+  private handleListPatients(request: MockRequest, now: Date): MockResponse {
+    const session = this.getSession(request, now);
+    if (!session)
+      return genericError(401, "AUTHENTICATION_REQUIRED", "Authentication is required.");
+
+    const identity = mockIdentities.find((entry) => entry.user.id === session.identityId);
+    if (
+      !identity ||
+      identity.user.kind !== "STAFF" ||
+      identity.membershipId === null ||
+      !identity.organization ||
+      !identity.permissions.includes("local_records.read_with_context")
+    ) {
+      return genericError(403, "POLICY_DENIED", "This context cannot read the patient directory.");
+    }
+    if (this.isIdentitySuspended(identity)) {
+      return genericError(403, "CONTEXT_DENIED", "Your current work context is no longer active.");
+    }
+    const organization = identity.organization;
+
+    const requestedLimit = getQueryValue(request.query, "limit");
+    const limit = requestedLimit ? Number(requestedLimit) : 25;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return genericError(422, "VALIDATION_ERROR", "The request could not be validated.");
+    }
+
+    const rawSearch = request.query?.search;
+    if (rawSearch !== undefined && (typeof rawSearch !== "string" || rawSearch.length > 100)) {
+      return genericError(422, "VALIDATION_ERROR", "The request could not be validated.");
+    }
+    const search = (getQueryValue(request.query, "search") ?? "").trim().toLocaleLowerCase();
+    const patientIds = this.accessiblePatientIds(identity);
+    const scope = JSON.stringify([
+      identity.user.id,
+      organization.organization_id,
+      patientIds,
+      search,
+      limit,
+    ]);
+    const cursor = getQueryValue(request.query, "cursor");
+    const cursorState = cursor ? this.collectionCursors.get(cursor) : undefined;
+    if (
+      cursor &&
+      (!cursorState || cursorState.scope !== scope || cursorState.expires <= now.getTime())
+    ) {
+      return genericError(
+        422,
+        "VALIDATION_ERROR",
+        "This page has expired. Start the search again.",
+      );
+    }
+    const offset = cursorState?.offset ?? 0;
+    const items = patientIds.flatMap((patientId) => {
+      const demographics = this.records.find(
+        (record) =>
+          record.patient_id === patientId &&
+          record.source.organization_id === organization.organization_id &&
+          record.domain === "demographics",
+      );
+      if (!demographics || !("name" in demographics.payload)) return [];
+
+      const latestEncounterAt = this.encounters
+        .filter(
+          (encounter) =>
+            encounter.patient_id === patientId &&
+            encounter.organization_id === organization.organization_id,
+        )
+        .map((encounter) => encounter.started_at)
+        .sort()
+        .at(-1);
+      const item: PatientDirectoryEntry = {
+        patient_id: patientId,
+        health_id: `RSH-${patientId}`,
+        name: demographics.payload.name,
+        date_of_birth:
+          "date_of_birth" in demographics.payload
+            ? demographics.payload.date_of_birth
+            : "1970-01-01",
+        local_patient_id: demographics.source.local_patient_id,
+        organization,
+        latest_encounter_at: latestEncounterAt ?? null,
+      };
+      return [item];
+    });
+
+    const filtered = items.filter(
+      (item) =>
+        !search ||
+        [item.name, item.health_id, item.local_patient_id].some((value) =>
+          value.toLocaleLowerCase().includes(search),
+        ),
+    );
+    let nextCursor: string | null = null;
+    for (const [key, value] of this.collectionCursors) {
+      if (value.expires <= now.getTime()) this.collectionCursors.delete(key);
+    }
+    if (offset + limit < filtered.length) {
+      nextCursor = createId();
+      this.collectionCursors.set(nextCursor, {
+        scope,
+        offset: offset + limit,
+        expires: now.getTime() + 300_000,
+      });
+    }
+    const body = {
+      items: filtered.slice(offset, offset + limit),
+      next_cursor: nextCursor,
+      correlation_id: createId(),
+      retrieved_at: serializeDate(now),
+      completeness_notice:
+        "Information may be unavailable or specially protected; absence is not confirmation of no condition.",
+    };
+    patientDirectoryCollectionSchema.parse(body);
+    return success(200, body);
+  }
+
   private handleReadRecords(
     request: MockRequest,
     now: Date,
@@ -1270,7 +1402,7 @@ export class MockAuthService {
         "The local source returned an invalid response.",
       );
     }
-    if (patientId !== identity.patientId || patientId !== DEMO_PATIENT_ID) {
+    if (!this.canAccessLocalPatient(identity, patientId)) {
       return genericError(404, "NOT_FOUND", "The requested patient was not found.");
     }
 
@@ -1336,7 +1468,7 @@ export class MockAuthService {
     if (replay) return replay;
 
     if (
-      patientId !== identity.patientId ||
+      !this.canAccessLocalPatient(identity, patientId) ||
       !identity.organization ||
       !this.canWriteDomain(identity, domain)
     ) {
@@ -1360,7 +1492,7 @@ export class MockAuthService {
     if (!encounter) return genericError(404, "NOT_FOUND", "The requested encounter was not found.");
 
     const recordId = createId();
-    const localPatientId = this.localPatientId(identity.organization.organization_id);
+    const localPatientId = this.localPatientId(identity.organization.organization_id, patientId);
     const record: ClinicalRecord = {
       id: recordId,
       version_id: createId(),
@@ -1606,6 +1738,11 @@ export class MockAuthService {
     ) {
       return genericError(403, "POLICY_DENIED", "This context cannot read consent requests.");
     }
+    if (this.isIdentitySuspended(identity))
+      return genericError(403, "CONTEXT_DENIED", "Your current work context is no longer active.");
+    const limit = Number(getQueryValue(request.query, "limit") ?? 25);
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+      return genericError(422, "VALIDATION_ERROR", "The request could not be validated.");
     const patientId = getQueryValue(request.query, "patient_id");
     const status = getQueryValue(request.query, "status");
     const requests = this.consentRequests
@@ -1616,13 +1753,39 @@ export class MockAuthService {
           (!patientId || item.patient_id === patientId) &&
           (!status || item.status === status),
       )
-      .map((item) => this.expireRequest(item, now));
+      .map((item) => this.expireRequest(item, now))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
+    const scope = JSON.stringify([
+      "requests",
+      identity.user.id,
+      identity.organization.organization_id,
+      patientId,
+      status,
+      limit,
+    ]);
+    const cursor = getQueryValue(request.query, "cursor");
+    const cursorState = cursor ? this.collectionCursors.get(cursor) : undefined;
+    if (
+      cursor &&
+      (!cursorState || cursorState.scope !== scope || cursorState.expires <= now.getTime())
+    )
+      return genericError(422, "VALIDATION_ERROR", "This page has expired. Start again.");
+    const offset = cursorState?.offset ?? 0;
+    let nextCursor: string | null = null;
+    if (offset + limit < requests.length) {
+      nextCursor = createId();
+      this.collectionCursors.set(nextCursor, {
+        scope,
+        offset: offset + limit,
+        expires: now.getTime() + 300_000,
+      });
+    }
     const body = {
-      items: requests.map((item) => ({
+      items: requests.slice(offset, offset + limit).map((item) => ({
         request: item,
         grant: this.consentGrants.find((grant) => grant.request_id === item.id) ?? null,
       })),
-      next_cursor: null,
+      next_cursor: nextCursor,
       correlation_id: createId(),
       source: null,
       retrieved_at: serializeDate(now),
@@ -3039,7 +3202,30 @@ export class MockAuthService {
     };
   }
 
-  private localPatientId(organizationId: string) {
+  private accessiblePatientIds(identity: MockIdentity) {
+    if (!identity.organization) return [];
+
+    return Array.from(
+      new Set(
+        this.records
+          .filter(
+            (record) =>
+              record.source.organization_id === identity.organization?.organization_id &&
+              record.domain === "demographics",
+          )
+          .map((record) => record.patient_id),
+      ),
+    );
+  }
+
+  private canAccessLocalPatient(identity: MockIdentity, patientId: string) {
+    return this.accessiblePatientIds(identity).includes(patientId);
+  }
+
+  private localPatientId(organizationId: string, patientId = DEMO_PATIENT_ID) {
+    if (patientId === DEMO_SECOND_PATIENT_ID) {
+      return organizationId === DEMO_UNITY_ORGANIZATION_ID ? "HSP-99211" : "PAT-00304";
+    }
     return organizationId === DEMO_UNITY_ORGANIZATION_ID ? "HSP-99210" : "PAT-00291";
   }
 
@@ -3079,6 +3265,32 @@ export class MockAuthService {
         type: "EMERGENCY",
         status: "OPEN",
         started_at: serializeDate(new Date(now.getTime() - 90 * 60 * 1000)),
+        ended_at: null,
+        version: 1,
+      },
+      {
+        id: DEMO_SECOND_MERCY_ENCOUNTER_ID,
+        patient_id: DEMO_SECOND_PATIENT_ID,
+        organization_id: DEMO_MERCY_ORGANIZATION_ID,
+        local_patient_id: "PAT-00304",
+        ward_id: DEMO_MERCY_WARD_ID,
+        attending_membership_id: "00000000-0000-4000-8000-000000000009",
+        type: "ROUTINE",
+        status: "OPEN",
+        started_at: serializeDate(new Date(now.getTime() - 5 * 60 * 60 * 1000)),
+        ended_at: null,
+        version: 1,
+      },
+      {
+        id: DEMO_SECOND_UNITY_ENCOUNTER_ID,
+        patient_id: DEMO_SECOND_PATIENT_ID,
+        organization_id: DEMO_UNITY_ORGANIZATION_ID,
+        local_patient_id: "HSP-99211",
+        ward_id: DEMO_UNITY_WARD_ID,
+        attending_membership_id: "00000000-0000-4000-8000-000000000007",
+        type: "ROUTINE",
+        status: "OPEN",
+        started_at: serializeDate(new Date(now.getTime() - 4 * 60 * 60 * 1000)),
         ended_at: null,
         version: 1,
       },

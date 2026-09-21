@@ -16,11 +16,11 @@ export function WorkspaceUnavailable({ isContextDenied, onReturn }: WorkspaceUna
               className="size-5 text-warning"
               weight="duotone"
             />
-            {isContextDenied ? "Context needs review" : "Workspace unavailable"}
+            {isContextDenied ? "Account access needs review" : "Home unavailable"}
           </CardTitle>
           <CardDescription>
             {isContextDenied
-              ? "Your signed-in identity is known, but its current membership context is no longer active. No protected data was loaded."
+              ? "Your hospital account is no longer active. Contact your administrator to restore access."
               : "The current session could not be verified. No protected data was loaded."}
           </CardDescription>
         </CardHeader>

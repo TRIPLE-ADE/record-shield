@@ -45,9 +45,12 @@ export async function createConsentRequest(input: ConsentRequestCreate) {
   return consentRequestResponseSchema.parse(response.data);
 }
 
-export async function listConsentRequests(patientId?: string) {
+export async function listConsentRequests(
+  patientId?: string,
+  options?: { cursor?: string; limit?: number },
+) {
   const response = await apiClient.get("/consent/requests", {
-    params: { patient_id: patientId, limit: 25 },
+    params: { patient_id: patientId, limit: options?.limit ?? 25, cursor: options?.cursor },
     headers: { "Cache-Control": "no-store" },
   });
   return consentRequestStatusCollectionSchema.parse(response.data);

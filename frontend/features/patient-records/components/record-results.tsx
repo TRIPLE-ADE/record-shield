@@ -26,8 +26,8 @@ export function RecordResults({
     return (
       <PatientRecordsState
         kind="empty"
-        title="No records in this domain"
-        description="The current source did not return a record for this patient and context."
+        title="No records in this category"
+        description="The hospital returned no records for this request. Information may be unavailable or protected."
       />
     );
   }

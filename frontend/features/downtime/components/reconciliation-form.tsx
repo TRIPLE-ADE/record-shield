@@ -152,7 +152,7 @@ export function ReconciliationForm({ patientId }: { patientId?: string | null })
             <Field
               label="Patient ID"
               error={fieldError(errors, "patient_id")}
-              hint="Canonical UUID from the verified context."
+              hint="The patient ID associated with this paper form."
             >
               <Input
                 {...form.register("patient_id")}
@@ -225,7 +225,7 @@ export function ReconciliationForm({ patientId }: { patientId?: string | null })
           <Field
             label="Operator note"
             error={fieldError(errors, "notes")}
-            hint="Stored outside the clinical payload; optional for the operator."
+            hint="Optional recovery notes. Do not include clinical details."
           >
             <Textarea {...form.register("notes")} placeholder="Why this form is being reconciled" />
           </Field>

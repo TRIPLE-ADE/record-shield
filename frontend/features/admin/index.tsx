@@ -13,7 +13,7 @@ export default function AdminPage() {
     return (
       <AdminState
         title="Administration is restricted"
-        description="Sign in with an authorized security context to continue."
+        description="Sign in with a security administrator account to continue."
       />
     );
   }
@@ -24,7 +24,7 @@ export default function AdminPage() {
     return (
       <AdminState
         title="Administration is restricted"
-        description="Only a local security administrator can manage hospital policy and duty context."
+        description="Only your hospital’s security administrator can manage policies and staff assignments."
       />
     );
   }

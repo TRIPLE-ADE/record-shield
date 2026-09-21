@@ -34,7 +34,7 @@ test("shows a patient workspace and an in-context nursing write form", async () 
 
   await expect.element(page.getByRole("heading", { level: 1, name: "Musa Ibrahim" })).toBeVisible();
   await expect.element(page.getByText("HSP-99210 · Unity Medical")).toBeVisible();
-  await expect.element(page.getByText("Patient workspace")).toBeVisible();
+  await expect.element(page.getByText("Patient record")).toBeVisible();
 
   await userEvent.click(page.getByRole("button", { name: "Nursing" }));
   await expect

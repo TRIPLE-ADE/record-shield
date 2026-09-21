@@ -30,9 +30,10 @@ test("shows resilience dependencies and submits a paper form reconciliation", as
   );
 
   await expect
-    .element(page.getByRole("heading", { level: 1, name: /Downtime and demo hardening/ }))
+    .element(page.getByRole("heading", { level: 1, name: /Downtime recovery/ }))
     .toBeVisible();
   await expect.element(page.getByText("Dependency readiness")).toBeVisible();
+  await userEvent.click(page.getByText("Demo rehearsal tools"));
   await expect.element(page.getByText("Demo rehearsal controls")).toBeVisible();
 
   await userEvent.fill(page.getByRole("textbox", { name: "Form serial" }), "UNITY-DT-UI-0001");

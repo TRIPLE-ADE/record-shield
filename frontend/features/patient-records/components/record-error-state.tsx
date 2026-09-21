@@ -9,8 +9,8 @@ export function RecordErrorState({ error }: { error: Error | null }) {
     return (
       <PatientRecordsState
         kind="denied"
-        title="This domain is outside the current scope"
-        description="Your role can continue with the domains assigned to this context."
+        title="These records are not available to you"
+        description="You can still view the record categories permitted for your role and care assignment."
       />
     );
   }

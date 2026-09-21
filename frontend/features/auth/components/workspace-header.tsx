@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BuildingsIcon,
-  CaretDownIcon,
   ClockCountdownIcon,
   SignOutIcon,
   UserCircleIcon,
@@ -53,7 +52,7 @@ export function WorkspaceHeader() {
           <Link
             href="/workspace"
             className="flex items-center gap-2 md:hidden"
-            aria-label="Workspace home"
+            aria-label="RecordShield home"
           >
             <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
               <BuildingsIcon aria-hidden="true" className="size-4" weight="duotone" />
@@ -63,7 +62,7 @@ export function WorkspaceHeader() {
           <div className="hidden min-w-0 items-center gap-2 text-sm sm:flex">
             <span className="truncate text-muted-foreground">RecordShield</span>
             <span className="text-border">/</span>
-            <span className="font-medium">Workspace</span>
+            <span className="font-medium">{context?.organization?.name ?? "Home"}</span>
           </div>
         </div>
 
@@ -96,12 +95,11 @@ export function WorkspaceHeader() {
           <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-card/60 px-2.5 py-1.5">
             <UserCircleIcon aria-hidden="true" className="size-4 text-primary" weight="duotone" />
             <span className="hidden max-w-28 truncate text-xs font-medium sm:block">
-              {context?.user.username ?? "Context unavailable"}
+              {context?.user.username ?? "Account unavailable"}
             </span>
             <span className="hidden text-[0.65rem] text-muted-foreground xl:block">
               {formatRoleName(context?.role ?? null)}
             </span>
-            <CaretDownIcon aria-hidden="true" className="size-3 text-muted-foreground" />
           </div>
 
           <ThemeToggle />

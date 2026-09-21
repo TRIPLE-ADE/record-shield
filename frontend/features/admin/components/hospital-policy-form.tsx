@@ -50,8 +50,8 @@ export function HospitalPolicyForm({ policy }: { policy: HospitalPolicy }) {
       <CardHeader>
         <CardTitle>Emergency policy</CardTitle>
         <CardDescription>
-          Configure the hospital ceiling. Access decisions still require patient, role, and
-          encounter context.
+          Set the records and roles your hospital permits. Access also depends on the patient’s care
+          assignment and current visit.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -79,7 +79,7 @@ export function HospitalPolicyForm({ policy }: { policy: HospitalPolicy }) {
               <span>
                 <span className="block font-medium">Restricted Level 2 enabled</span>
                 <span className="text-xs text-muted-foreground">
-                  Keep individually selected restricted domains behind policy.
+                  Require explicit approval for each restricted record category.
                 </span>
               </span>
             </label>
@@ -127,7 +127,7 @@ export function HospitalPolicyForm({ policy }: { policy: HospitalPolicy }) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Level 2 domains</Label>
+              <Label>Additional record categories</Label>
               <div className="grid max-h-44 gap-2 overflow-y-auto rounded-lg border border-border/70 p-3 sm:grid-cols-2">
                 {emergencyDomainOptions.map((option) => (
                   <label

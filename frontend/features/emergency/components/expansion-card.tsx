@@ -73,7 +73,7 @@ export function ExpansionCard({
             onExpanded(next);
             form.reset({ domains: [], narrative: "", expected_version: result.session.version });
             setSelectedDomains([]);
-            toast.success("Level 2 scope granted");
+            toast.success("Additional records available");
           }
         },
         onError: (error) => toast.error(getEmergencyErrorMessage(error)),
@@ -86,11 +86,11 @@ export function ExpansionCard({
       <CardHeader className="px-5 py-5">
         <CardTitle className="flex items-center gap-2 text-base">
           <LockKeyIcon aria-hidden="true" className="size-4 text-emergency" />
-          Request a specific domain
+          Request additional records
         </CardTitle>
         <CardDescription>
-          Level 2 requires an explicit domain and a treatment narrative. Restricted source domains
-          remain unavailable.
+          Choose only the records needed for immediate treatment and explain why you need them. Some
+          records may be restricted by the hospital.
         </CardDescription>
       </CardHeader>
       <CardContent className="px-5 pb-5">
@@ -101,13 +101,13 @@ export function ExpansionCard({
           onClick={() => onOpenChange(true)}
           disabled={session.justification_status === "JUSTIFICATION_OVERDUE"}
         >
-          Choose Level 2 domains
+          Choose additional records
         </Button>
       </CardContent>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Choose the smallest useful scope</DialogTitle>
+            <DialogTitle>Choose the records you need</DialogTitle>
             <DialogDescription>
               This request is added to the active emergency session and is visible in the audit
               trail.
@@ -115,7 +115,7 @@ export function ExpansionCard({
           </DialogHeader>
           <form className="space-y-5" onSubmit={form.handleSubmit(submit)}>
             <fieldset className="grid gap-2 sm:grid-cols-2">
-              <legend className="mb-2 text-sm font-semibold">Available domains</legend>
+              <legend className="mb-2 text-sm font-semibold">Available record categories</legend>
               {emergencyDomainOptions.map((option) => {
                 const checked = selectedDomainSet.has(option.value);
                 const alreadyExpanded = expandedDomainSet.has(option.value);
@@ -163,7 +163,7 @@ export function ExpansionCard({
                 rows={4}
                 minLength={20}
                 maxLength={1000}
-                placeholder="Describe the immediate treatment decision this domain supports…"
+                placeholder="Explain how these records will help with immediate treatment…"
               />
               <div className="flex justify-between gap-3 text-xs text-muted-foreground">
                 <span>20–1000 characters</span>
@@ -172,10 +172,10 @@ export function ExpansionCard({
             </div>
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-                Keep current scope
+                Keep current access
               </Button>
               <Button type="submit" disabled={!form.formState.isValid || expand.isPending}>
-                {expand.isPending ? "Requesting…" : "Request Level 2 access"}
+                {expand.isPending ? "Requesting…" : "Request additional access"}
               </Button>
             </DialogFooter>
           </form>
