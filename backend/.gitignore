@@ -8,3 +8,4 @@ __pycache__/
 RecordShield_PRD_and_Architecture.pdf
 PLAN.md
 audit.sqlite
+.env.production

@@ -63,6 +63,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="RecordShield Audit Service (private)", lifespan=lifespan, docs_url=None)
 
 
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 async def require_service_key(
     x_service_key: Annotated[str | None, Header(alias="X-Service-Key")] = None,
 ) -> None:

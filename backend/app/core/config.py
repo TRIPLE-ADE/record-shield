@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     database_url: str
     session_secret: str
     m1_test_key: str = "m1-development-only"
+    secure_cookies: bool = True
     mercy_emr_url: str = "http://localhost:8001"
     mercy_emr_service_key: str = "mercy-emr-dev-service-key"
     source_timeout_seconds: float = 5.0

@@ -1,6 +1,6 @@
 # RecordShield Backend
 
-The backend is a FastAPI application under `backend/`. It provides the M1-M4 API vertical slices: shared request infrastructure, authentication, the local clinical workspace, and exchange/consent workflows.
+The backend is a FastAPI application under `backend/`. It provides the M1-M6 API: shared request infrastructure, authentication, the local clinical workspace, exchange/consent workflows, emergency access, audit evidence, security review, administration and downtime reconciliation.
 
 The API base path is `/api/v1`. The wire contract is documented in [`../docs/RecordShield_API_Contract.md`](../docs/RecordShield_API_Contract.md) and [`../docs/RecordShield_OpenAPI.json`](../docs/RecordShield_OpenAPI.json).
 
@@ -12,9 +12,14 @@ Implemented routes include:
 - Authentication: CSRF bootstrap, login, logout, and `GET /api/v1/me`
 - Local workspace: encounters, local record list/create, and record correction
 - Exchange and consent: source discovery, consent requests, grants, revocation, and read-only remote records
+- Patient portal: `GET /api/v1/portal`
+- Emergency access: activation, summary read, expansion, justification, status and revocation
+- Security: `GET /api/v1/security/events`, `POST /api/v1/security/chains/{id}/verify`, alerts list and review
+- Administration: context assignments, hospital policy, suspensions
+- Downtime: `POST /api/v1/downtime/reconciliations`
 - Development-only M1 probe: `POST /api/v1/_infrastructure/m1/probe`
 
-M1-M4 are complete for the synthetic local vertical slice. Emergency access, administration, downtime reconciliation, and production vendor adapters remain future milestones. See [`milestone.md`](milestone.md) for delivery status and acceptance boundaries.
+M1-M6 are complete for the synthetic vertical slice; production vendor adapters remain out of scope. See [`milestone.md`](milestone.md) for delivery status and acceptance boundaries.
 
 ## Requirements
 
@@ -78,6 +83,37 @@ docker compose up -d db
 docker compose ps
 ```
 
+### Container images
+
+Each process has its own image:
+
+```bash
+docker build -f Dockerfile.api -t recordshield-api .
+docker build -f Dockerfile.audit -t recordshield-audit .
+docker build -f Dockerfile.mock-emr -t recordshield-mock-emr .
+```
+
+- API: port `8000`, `app.main:app`
+- Audit service: port `8002`, `audit_service.main:app`; persistent storage at `/data`, default path `/data/audit.sqlite`
+- Mock EMR: port `8001`, `mock_emr.main:app`
+
+The audit and mock-EMR images are private service targets and must never be exposed publicly.
+
+## Deployment
+
+The hackathon deployment is a single EC2 instance running `compose.prod.yml`: MySQL 8.4, the audit service, the mock EMR, the API and a Caddy reverse proxy. Only Caddy (ports 80 and 443) is reachable from the internet; it holds a Let's Encrypt certificate for `SITE_ADDRESS`, redirects HTTP to HTTPS and proxies to the API. Everything else stays on the internal Compose network. The audit SQLite file and the MySQL data live in named Docker volumes.
+
+Current environment:
+
+- API: `https://34-237-67-194.sslip.io/api/v1`
+- Docs: `https://34-237-67-194.sslip.io/docs`
+
+The hostname is the Elastic IP through the public `sslip.io` wildcard DNS. To use a real domain, point an A record at the Elastic IP, change `SITE_ADDRESS` in the server's `.env.production` and redeploy.
+
+Infrastructure is defined in [`infra/main.tf`](infra/main.tf) (key pair, security group, Ubuntu 24.04 `t3.medium` with Docker installed on boot, Elastic IP). Deployment is `infra/deploy.sh <public-ip>`, which syncs the backend, builds the images on the server, starts the stack and runs `alembic upgrade head`. Secrets live only in `/srv/recordshield/.env.production` on the server, generated from `.env.production.example`; that file is gitignored. See [`infra/README.md`](infra/README.md) for the full procedure.
+
+`.github/workflows/ci.yml` runs lint and the test suite on every push and pull request.
+
 The standard MySQL port must be free. If another MySQL installation is already using port `3306`, stop that service before starting this container, or change both the Compose port mapping and `DATABASE_URL` together.
 
 ## Migrations
@@ -88,7 +124,7 @@ Apply the schema and deterministic synthetic seed data after the database is ava
 uv run alembic upgrade head
 ```
 
-The current migration head is `0002_m4_exchange_consent`.
+The current migration head is `0009_downtime_reconciliations`.
 
 Useful commands:
 

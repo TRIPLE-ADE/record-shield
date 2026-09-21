@@ -15,7 +15,7 @@ router = APIRouter(tags=["auth"])
 def _secure_cookie() -> bool:
     from app.core.config import settings
 
-    return settings.environment != "development"
+    return settings.environment != "development" and settings.secure_cookies
 
 
 def _set_cookie(response: Response, name: str, value: str, max_age: int) -> None:

@@ -1,0 +1,93 @@
+name: recordshield
+
+services:
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: recordshield
+      MYSQL_USER: recordshield
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - mysqldata:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-urecordshield", "-p${DB_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  audit:
+    build:
+      context: .
+      dockerfile: Dockerfile.audit
+    restart: unless-stopped
+    environment:
+      AUDIT_DATABASE_PATH: /data/audit.sqlite
+      AUDIT_SERVICE_KEY: ${AUDIT_SERVICE_KEY}
+    volumes:
+      - auditdata:/data
+
+  mock-emr:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock-emr
+    restart: unless-stopped
+    environment:
+      MERCY_EMR_DATABASE_URL: mysql+asyncmy://mercy_emr:mercy_emr@db:3306/mercy_emr
+      MERCY_EMR_SERVICE_KEY: ${MERCY_EMR_SERVICE_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: mysql+asyncmy://recordshield:${DB_PASSWORD}@db:3306/recordshield
+      SESSION_SECRET: ${SESSION_SECRET}
+      M1_TEST_KEY: ${M1_TEST_KEY}
+      MERCY_EMR_URL: http://mock-emr:8001
+      MERCY_EMR_SERVICE_KEY: ${MERCY_EMR_SERVICE_KEY}
+      AUDIT_SERVICE_URL: http://audit:8002
+      AUDIT_SERVICE_KEY: ${AUDIT_SERVICE_KEY}
+    command:
+      - /app/.venv/bin/uvicorn
+      - app.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    depends_on:
+      db:
+        condition: service_healthy
+      audit:
+        condition: service_started
+      mock-emr:
+        condition: service_started
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  mysqldata:
+  auditdata:
+  caddydata:
