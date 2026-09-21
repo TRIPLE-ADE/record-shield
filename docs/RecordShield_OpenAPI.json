@@ -158,6 +158,7 @@
                     "ends_at": "2026-09-20T16:00:00Z",
                     "active": true
                   },
+                  "security_stream_id": null,
                   "permissions_summary": [
                     "local_records.read_with_context",
                     "consent.request",
@@ -377,6 +378,7 @@
                     "ends_at": "2026-09-20T16:00:00Z",
                     "active": true
                   },
+                  "security_stream_id": null,
                   "permissions_summary": [
                     "local_records.read_with_context",
                     "consent.request",
@@ -5602,6 +5604,18 @@
               }
             ]
           },
+          "security_stream_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Server-derived authorized audit stream. Null when the current context cannot read a security stream; clients must not infer this value."
+          },
           "permissions_summary": {
             "type": "array",
             "items": {
@@ -5642,6 +5656,7 @@
           "organization",
           "patient_id",
           "shift",
+          "security_stream_id",
           "permissions_summary",
           "csrf_token",
           "idle_expires_at",
@@ -5668,6 +5683,7 @@
             "ends_at": "2026-09-20T16:00:00Z",
             "active": true
           },
+          "security_stream_id": null,
           "permissions_summary": [
             "local_records.read_with_context",
             "consent.request",

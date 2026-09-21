@@ -229,6 +229,7 @@ Schema: **SessionContext**.
     "ends_at": "2026-09-20T16:00:00Z",
     "active": true
   },
+  "security_stream_id": null,
   "permissions_summary": [
     "local_records.read_with_context",
     "consent.request",
@@ -285,6 +286,8 @@ Empty body.
 
 Reload current role, membership, trust and duty context. Permission strings describe possible actions, never a decision for a patient. Patient login returns patient_id, null membership/role/organization/shift. Trust operator returns TRUST_OPERATOR with null membership/organization/shift. Suspension denies protected access; no cached authorization.
 
+`security_stream_id` is a server-derived authorized audit stream UUID. It is populated only for a security administrator or trust operator whose current context may read the corresponding stream, and is `null` for every other context. Clients must use this value for security event, alert and chain requests; they must not infer a stream from a client-selected organization or fixture identifier.
+
 ### Request body
 
 None. Do not send a JSON body.
@@ -314,6 +317,7 @@ Schema: **SessionContext**.
     "ends_at": "2026-09-20T16:00:00Z",
     "active": true
   },
+  "security_stream_id": null,
   "permissions_summary": [
     "local_records.read_with_context",
     "consent.request",
@@ -3385,6 +3389,18 @@ These are the exact component schemas used by the OpenAPI file. `required` is ex
         }
       ]
     },
+    "security_stream_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "uuid"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Server-derived authorized audit stream. Null when the current context cannot read a security stream; clients must not infer this value."
+    },
     "permissions_summary": {
       "type": "array",
       "items": {
@@ -3425,6 +3441,7 @@ These are the exact component schemas used by the OpenAPI file. `required` is ex
     "organization",
     "patient_id",
     "shift",
+    "security_stream_id",
     "permissions_summary",
     "csrf_token",
     "idle_expires_at",
@@ -8158,4 +8175,3 @@ These are the exact component schemas used by the OpenAPI file. `required` is ex
 ## Source and change record
 
 Derived from the delivered RecordShield PRD and Architecture v1.0 (19 September 2026), particularly sections 3, 6–13 and 16. This is a new API detail artifact, not a revision of the original PDF. Contract defaults identified above close missing transport details; product permissions and future-production exclusions remain unchanged. No external API, legal or interoperability conformance claim is made.
-

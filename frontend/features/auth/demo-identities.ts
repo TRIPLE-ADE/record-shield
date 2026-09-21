@@ -63,6 +63,14 @@ export const demoIdentities: DemoIdentity[] = [
     organization: "Unity Medical",
     mode: "LITE",
   },
+  {
+    username: "trust.operator",
+    label: "Trust operator",
+    description: "Exchange security operator",
+    role: "TRUST_OPERATOR",
+    organization: "Trust network",
+    mode: "TRUST",
+  },
 ];
 
 export const DEMO_PASSWORD = "synthetic-example-password";

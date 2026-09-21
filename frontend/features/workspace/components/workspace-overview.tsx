@@ -16,6 +16,7 @@ import { formatRole, formatTime, humanizePermission } from "../utils/format";
 import type { WorkspaceOverviewProps } from "../types";
 import { ContextItem } from "./context-item";
 import { NextStepCard } from "./next-step-card";
+import { PatientContextCard } from "./patient-context-card";
 
 export function WorkspaceOverview({ context, isFetching, onRefresh }: WorkspaceOverviewProps) {
   const firstName = context.user.username.split(".")[0];
@@ -124,6 +125,8 @@ export function WorkspaceOverview({ context, isFetching, onRefresh }: WorkspaceO
           </CardContent>
         </Card>
       </section>
+
+      <PatientContextCard context={context} />
 
       <section className="grid gap-4 sm:grid-cols-3">
         <NextStepCard

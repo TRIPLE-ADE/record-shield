@@ -3,7 +3,12 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ShieldCheckIcon, SquaresFourIcon, StackIcon } from "@phosphor-icons/react";
+import {
+  ClockCountdownIcon,
+  ShieldCheckIcon,
+  SquaresFourIcon,
+  StackIcon,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { WorkspaceHeader } from "@/features/auth/components/workspace-header";
 import { useSession } from "@/hooks/auth";
@@ -18,6 +23,9 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
   const patientRecordsHref = session.data?.patient_id
     ? `/workspace/patients/${session.data.patient_id}`
     : undefined;
+  const canAccessSecurity =
+    session.data?.role === "SECURITY_ADMIN" || session.data?.role === "TRUST_OPERATOR";
+  const canAccessDowntime = session.data?.role === "SECURITY_ADMIN";
   const navigation = [
     { label: "Overview", href: "/workspace", icon: SquaresFourIcon, disabled: false },
     {
@@ -26,7 +34,18 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
       icon: StackIcon,
       disabled: !patientRecordsHref,
     },
-    { label: "Security evidence", href: undefined, icon: ShieldCheckIcon, disabled: true },
+    {
+      label: "Security evidence",
+      href: canAccessSecurity ? "/workspace/security" : undefined,
+      icon: ShieldCheckIcon,
+      disabled: !canAccessSecurity,
+    },
+    {
+      label: "Downtime & rehearsal",
+      href: canAccessDowntime ? "/workspace/downtime" : undefined,
+      icon: ClockCountdownIcon,
+      disabled: !canAccessDowntime,
+    },
   ];
 
   return (
@@ -66,7 +85,10 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                 const isActive = Boolean(
                   item.href &&
                   (pathname === item.href ||
-                    (item.label === "Patient records" && pathname.startsWith(item.href))),
+                    ((item.label === "Patient records" ||
+                      item.label === "Security evidence" ||
+                      item.label === "Downtime & rehearsal") &&
+                      pathname.startsWith(item.href))),
                 );
                 const content = (
                   <>
@@ -78,7 +100,7 @@ export function WorkspaceShell({ children }: WorkspaceShellProps) {
                     <span>{item.label}</span>
                     {item.disabled ? (
                       <span className="ml-auto text-[0.6rem] uppercase tracking-[0.12em] text-sidebar-foreground/35">
-                        Next
+                        Restricted
                       </span>
                     ) : null}
                   </>

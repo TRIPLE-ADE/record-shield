@@ -1,5 +1,13 @@
 export { sessionQueryKey, useLogin, useLogout, useSession } from "./auth";
 export {
+  adminKeys,
+  useContextAssignments,
+  useHospitalPolicy,
+  useSuspendAdminTarget,
+  useUpdateHospitalPolicy,
+  useUpsertContextAssignment,
+} from "./admin";
+export {
   emergencyKeys,
   useActivateEmergency,
   useEmergencyRecords,
@@ -27,3 +35,16 @@ export {
   useLocalRecords,
   type RecordPurpose,
 } from "./patient-records";
+export {
+  downtimeKeys,
+  useCreateDowntimeReconciliation,
+  useDemoControls,
+  useDemoStatus,
+} from "./downtime";
+export {
+  securityKeys,
+  useReviewSecurityAlert,
+  useSecurityAlerts,
+  useSecurityEvents,
+  useVerifySecurityChain,
+} from "./security";

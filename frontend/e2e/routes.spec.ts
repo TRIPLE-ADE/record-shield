@@ -125,6 +125,32 @@ test("logout clears the protected workspace", async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/);
 });
 
+test("security administrator reviews stream evidence", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Sarah Bello" }).click();
+  await page.getByRole("button", { name: "Enter workspace" }).click();
+  await page.getByRole("link", { name: "Security evidence" }).click();
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Security evidence");
+  await expect(page.getByText("EMERGENCY ACTIVATED")).toBeVisible();
+  await page.getByRole("button", { name: "Verify chain" }).click();
+  await expect(page.getByText("VALID")).toBeVisible();
+  await page.getByRole("link", { name: "Administration" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Administration");
+  await expect(page.getByText("Emergency policy", { exact: true })).toBeVisible();
+});
+
+test("security administrator can open downtime resilience controls", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Sarah Bello" }).click();
+  await page.getByRole("button", { name: "Enter workspace" }).click();
+  await page.getByRole("link", { name: "Downtime & rehearsal" }).click();
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Downtime and demo hardening");
+  await expect(page.getByText("Dependency readiness")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Reconcile a paper form" })).toBeVisible();
+});
+
 test("design system is development-only", async ({ page }) => {
   const response = await page.goto("/design-system");
 
