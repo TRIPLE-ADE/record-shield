@@ -27,13 +27,13 @@ import { ReconciliationResult } from "./reconciliation-result";
 const reconciliationFormSchema = z
   .object({
     form_serial: z.string().trim().min(1, "Enter the paper form serial.").max(80),
-    patient_id: z.string().uuid("Enter a canonical patient ID."),
-    encounter_id: z.string().uuid("Enter the encounter ID."),
+    patient_id: z.uuid("Enter a canonical patient ID."),
+    encounter_id: z.uuid("Enter the encounter ID."),
     occurred_at: z.string().min(1, "Enter when the paper form was created."),
     transcribed_at: z.string().min(1, "Enter when the form was transcribed."),
-    transcriber_id: z.string().uuid("Enter the transcriber ID."),
-    clinical_reviewer_id: z.string().uuid("Enter the clinical reviewer ID."),
-    record_id: z.string().uuid("Enter a local record ID."),
+    transcriber_id: z.uuid("Enter the transcriber ID."),
+    clinical_reviewer_id: z.uuid("Enter the clinical reviewer ID."),
+    record_id: z.uuid("Enter a local record ID."),
     record_version: z.number().int().min(1, "Version must be at least 1."),
     outcome: z.enum(["RECONCILED", "DISCREPANCY_REQUIRES_REVIEW"]),
     notes: z.string().max(400, "Keep the note under 400 characters.").optional(),

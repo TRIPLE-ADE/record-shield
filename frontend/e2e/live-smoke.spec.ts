@@ -1,3 +1,5 @@
+import { patientContextSchema } from "../lib/api/contracts/patients";
+import { worklistSchema } from "../lib/api/contracts/worklist";
 import { expect, test } from "@playwright/test";
 
 for (const username of ["amina.unity", "musa.patient", "sarah.unity"]) {
@@ -14,6 +16,9 @@ for (const username of ["amina.unity", "musa.patient", "sarah.unity"]) {
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await expect(page).toHaveURL(username === "musa.patient" ? /\/portal$/ : /\/workspace$/);
     if (username === "amina.unity") {
+      const worklist = await page.request.get("/api/v1/worklist");
+      expect(worklist.status()).toBe(200);
+      expect(worklistSchema.safeParse(await worklist.json()).success).toBe(true);
       await page.getByRole("link", { name: "Patients", exact: true }).click();
       await expect(page.getByText("Musa Ibrahim")).toBeVisible();
       await expect(page.getByText("Ada Nwosu")).toHaveCount(0);
@@ -22,8 +27,16 @@ for (const username of ["amina.unity", "musa.patient", "sarah.unity"]) {
         .first()
         .click();
       await expect(
-        page.getByText(/does not provide current visits|Visit selection|open visits/i).first(),
-      ).toBeVisible();
+        page.getByText("Visit selection is not available", { exact: false }),
+      ).toHaveCount(0);
+      await expect(page.getByLabel("Visit and documentation")).toBeVisible();
+      const patientId = new URL(page.url()).pathname.split("/").at(-1);
+      const response = await page.request.get(`/api/v1/patients/${patientId}/context`);
+      expect(response.status()).toBe(200);
+      const parsed = patientContextSchema.safeParse(await response.json());
+      expect(parsed.success).toBe(true);
+      if (parsed.success && parsed.data.encounters.length)
+        await expect(page.getByLabel("Current visit", { exact: true })).toBeVisible();
     }
     if (username === "sarah.unity") {
       const events = page.waitForResponse((response) =>

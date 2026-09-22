@@ -3,8 +3,8 @@ import { patientSummarySchema, type PatientSummary } from "./exchange";
 import { sourceSchema, type Source } from "./auth";
 import { provenanceSchema, recordCollectionSchema, type RecordCollection } from "./records";
 
-const uuid = z.string().uuid();
-const utcDateTime = z.string().datetime({ offset: false });
+const uuid = z.uuid();
+const utcDateTime = z.iso.datetime({ offset: false });
 
 export const emergencyReasonCodeSchema = z.enum([
   "UNCONSCIOUS",

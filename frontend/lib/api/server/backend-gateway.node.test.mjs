@@ -4,7 +4,7 @@ import { forwardBackendRequest, adaptBackendResponse, auditStreamId } from "./ba
 const base = "https://backend.example/api/v1";
 const request = (path, options) => new Request(`http://localhost:3000/api/v1/${path}`, options);
 test("missing and unsafe routes never reach backend", async () => {
-  for (const path of ["patients/abc/context", "worklist", "_infrastructure/m1/probe", "../me"]) {
+  for (const path of ["patients/abc/unknown", "demo/reset", "_infrastructure/m1/probe", "../me"]) {
     const response = await forwardBackendRequest(request(path), path.split("/"), base, () => {
       throw Error("must not fetch");
     });
@@ -113,4 +113,25 @@ test("Next normalized URLs accept the original HTTP host", async () => {
     async () => Response.json({ ok: true }),
   );
   assert.equal(response.status, 200);
+});
+
+test("new patient context, worklist and notification routes reach the backend", async () => {
+  for (const [method, path] of [
+    ["GET", "patients/example/context"],
+    ["GET", "worklist"],
+    ["POST", "portal/notifications/example/read"],
+  ]) {
+    let called = false;
+    const response = await forwardBackendRequest(
+      request(path, { method }),
+      path.split("/"),
+      base,
+      async () => {
+        called = true;
+        return Response.json({ ok: true });
+      },
+    );
+    assert.equal(called, true);
+    assert.equal(response.status, 200);
+  }
 });

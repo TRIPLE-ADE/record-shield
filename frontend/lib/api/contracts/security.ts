@@ -2,8 +2,8 @@ import { z } from "zod";
 import { roleSchema, sourceSchema, type Role, type Source } from "./auth";
 import { domainSchema } from "./records";
 
-const uuid = z.string().uuid();
-const utcDateTime = z.string().datetime({ offset: false });
+const uuid = z.uuid();
+const utcDateTime = z.iso.datetime({ offset: false });
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
 
 export const auditContextSchema = z.strictObject({

@@ -3,7 +3,7 @@ import { encounterSchema } from "./records";
 import { sourceSchema } from "./auth";
 import { patientSummarySchema } from "./exchange";
 
-const utcDateTime = z.string().datetime({ offset: false });
+const utcDateTime = z.iso.datetime({ offset: false });
 
 /**
  * A directory entry is deliberately narrower than a clinical record. The
@@ -19,7 +19,7 @@ export const patientDirectoryEntrySchema = patientSummarySchema.extend({
 export const patientDirectoryCollectionSchema = z.strictObject({
   items: z.array(patientDirectoryEntrySchema).max(100),
   next_cursor: z.string().min(1).max(2048).nullable(),
-  correlation_id: z.string().uuid(),
+  correlation_id: z.uuid(),
   retrieved_at: utcDateTime,
   completeness_notice: z.string().min(1).max(400),
 });
@@ -32,6 +32,6 @@ export const patientContextSchema = z.strictObject({
   encounters: z.array(encounterSchema),
   can_request_records: z.boolean(),
   can_activate_emergency: z.boolean(),
-  correlation_id: z.string().uuid(),
+  correlation_id: z.uuid(),
 });
 export type PatientContext = z.infer<typeof patientContextSchema>;

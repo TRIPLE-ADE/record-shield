@@ -2,8 +2,8 @@ import { z } from "zod";
 import { roleSchema, sourceSchema } from "./auth";
 import { exchangeDomainSchema } from "./exchange";
 
-const uuid = z.string().uuid();
-const utcDateTime = z.string().datetime({ offset: false });
+const uuid = z.uuid();
+const utcDateTime = z.iso.datetime({ offset: false });
 const staffRoleSchema = z.enum([
   "ATTENDING_DOCTOR",
   "VISITING_DOCTOR",

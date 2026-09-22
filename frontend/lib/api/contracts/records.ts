@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-const utcDateTime = z.string().datetime({ offset: false });
-const uuid = z.string().uuid();
+const utcDateTime = z.iso.datetime({ offset: false });
+const uuid = z.uuid();
 
 export const domainSchema = z.enum([
   "demographics",
