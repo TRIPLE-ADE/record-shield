@@ -35,12 +35,12 @@ export function RecordPanel({
             {domainMeta[selectedDomain].label}
           </h2>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <ClockIcon aria-hidden="true" className="size-4" />
-          {selected.data?.retrieved_at
-            ? `Retrieved ${formatRecordDate(selected.data.retrieved_at)}`
-            : "Loading records"}
-        </div>
+        {selected.data?.retrieved_at ? (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <ClockIcon aria-hidden="true" className="size-4" />
+            {`Retrieved ${formatRecordDate(selected.data.retrieved_at)}`}
+          </div>
+        ) : null}
       </div>
 
       <RecordResults selected={selected} canWrite={canWrite} />

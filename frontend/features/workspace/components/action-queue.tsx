@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-rows";
+
 import Link from "next/link";
 import { useState } from "react";
 import { useWorklist } from "@/hooks/worklist";
@@ -29,8 +31,7 @@ export function ActionQueue() {
         </Button>
       </div>
     );
-  if (queue.isPending)
-    return <output className="p-5 text-sm text-muted-foreground">Loading your actions…</output>;
+  if (queue.isPending) return <LoadingRows label="Loading your actions…" />;
   const items = Array.from(
     new Map(queue.data.pages.flatMap((page) => page.items).map((item) => [item.id, item])).values(),
   );

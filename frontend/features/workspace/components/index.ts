@@ -4,3 +4,7 @@ export { ContextItem } from "./context-item";
 export { NextStepCard } from "./next-step-card";
 export { WorkspaceLoading } from "./workspace-loading";
 export { PatientContextCard } from "./patient-context-card";
+export { WorkspaceHeader } from "./workspace-header";
+export { WorkspaceShift } from "./workspace-shift";
+export { WorkspaceRequests } from "./workspace-requests";
+export { WorkspaceAdministration } from "./workspace-administration";

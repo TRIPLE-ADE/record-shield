@@ -1,4 +1,5 @@
-import { apiClient } from "@/lib/api/client";
+import { apiCapabilities } from "@/lib/api/capabilities";
+import { apiClient, ApiError } from "@/lib/api/client";
 import {
   patientDirectoryCollectionSchema,
   patientContextSchema,
@@ -23,6 +24,12 @@ export async function getPatientDirectory({
 }
 
 export async function getPatientContext(patientId: string) {
+  if (!apiCapabilities.patientContext)
+    throw new ApiError({
+      status: 501,
+      code: "FEATURE_UNAVAILABLE",
+      message: "Visit selection is not available from the connected service yet.",
+    });
   const response = await apiClient.get(`/patients/${patientId}/context`, {
     headers: { "Cache-Control": "no-store" },
   });

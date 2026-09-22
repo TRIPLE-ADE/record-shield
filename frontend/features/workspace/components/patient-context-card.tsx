@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-rows";
+
 import { ArrowRightIcon, DatabaseIcon, LockKeyIcon, UserCircleIcon } from "@phosphor-icons/react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +49,7 @@ export function PatientContextCard({ context }: { context: SessionContext }) {
       </CardHeader>
       <CardContent className="px-5 py-5 sm:px-6">
         {query.isPending ? (
-          <p className="text-sm text-muted-foreground">Loading patient details…</p>
+          <LoadingRows label="Loading patient details…" rows={1} />
         ) : query.error ? (
           <p className="text-sm text-muted-foreground">
             Patient details are currently unavailable.

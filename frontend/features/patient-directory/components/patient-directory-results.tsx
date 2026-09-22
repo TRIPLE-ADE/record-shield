@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-rows";
+
 import type { usePatientDirectory } from "@/hooks/patients";
 import type { PatientDirectoryEntry } from "@/lib/api/contracts/patients";
 import { Button } from "@/components/ui/button";
@@ -21,7 +23,7 @@ export function PatientDirectoryResults({
   return (
     <>
       {updating ? (
-        <output className="p-8 text-sm text-muted-foreground">Loading patients…</output>
+        <LoadingRows label="Loading patients…" />
       ) : query.error ? (
         <div role="alert" className="p-8">
           <p className="text-sm">We couldn’t load your patient list.</p>

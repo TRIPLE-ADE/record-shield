@@ -21,7 +21,6 @@ export function PatientOverview({
   encounterId?: string;
   context: SessionContext & { organization: NonNullable<SessionContext["organization"]> };
   sourceName?: string;
-  sourceMode?: "LITE" | "MOCK_EMR";
   canExchange: boolean;
   canEmergency: boolean;
 }) {

@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { mockAuthService, type MockRequest } from "@/lib/mock-api/auth-service";
+import { forwardBackendRequest, gatewayError } from "@/lib/api/server/backend-gateway";
+import type { MockRequest } from "@/lib/mock-api/auth-service";
 
 async function handle(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
+  if (process.env.RECORDSHIELD_BACKEND_URL) {
+    return forwardBackendRequest(request, path, process.env.RECORDSHIELD_BACKEND_URL);
+  }
+  if (process.env.NEXT_PUBLIC_API_URL)
+    return gatewayError(503, "SERVICE_UNAVAILABLE", "The connected service is not configured.");
+  const { mockAuthService } = await import("@/lib/mock-api/auth-service");
   const method = ["GET", "POST", "PATCH"].includes(request.method)
     ? (request.method as "GET" | "POST" | "PATCH")
     : undefined;

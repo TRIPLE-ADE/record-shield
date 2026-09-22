@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-rows";
+
 import { useEmergencyStatus } from "@/hooks/emergency";
 import { JustificationCard } from "@/features/emergency/components/justification-card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,7 @@ export function EmergencyReview({
           This review could not be loaded. Close it and try again.
         </p>
       ) : status.isPending ? (
-        <output className="text-sm text-muted-foreground">Loading review…</output>
+        <LoadingRows label="Loading review…" rows={1} />
       ) : status.data?.session.justification_status === "SUBMITTED" ? (
         <output className="text-sm">Your clinical review has been recorded.</output>
       ) : status.data ? (
