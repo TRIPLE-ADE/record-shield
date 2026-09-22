@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,12 +11,13 @@ from sqlalchemy.orm import aliased
 from app.api.v1.dependencies import Actor
 from app.core import clock
 from app.core.errors import ApiError
-from app.core.primitives import decode_cursor, encode_cursor
+from app.core.primitives import decode_cursor, encode_cursor, request_fingerprint
 from app.models import (
     ConsentGrant,
     ConsentRequest,
     EmergencyJustification,
     ExchangeTransaction,
+    IdempotencyRecord,
     Notification,
     Organization,
     Patient,
@@ -34,6 +35,7 @@ from app.schemas.portal import (
     PortalResponse,
 )
 from app.services.exchange import grant_view, practitioner_name, request_view
+from app.services.local_workspace import _idempotency, _require_key
 
 OUTCOME_BY_STATE = {
     "RELEASED": "ALLOWED",
@@ -70,6 +72,17 @@ def _next(actor: Actor, section: str, offset: int, limit: int, fetched: int) -> 
         return None
     return encode_cursor(
         {"actor": str(actor.user.id), "section": section, "offset": offset + limit}
+    )
+
+
+def notification_view(notification: Notification) -> NotificationView:
+    return NotificationView(
+        id=notification.id,
+        event_id=notification.event_id,
+        type=notification.notification_type,
+        created_at=clock.z(notification.created_at),
+        seen_at=clock.z(notification.seen_at) if notification.seen_at else None,
+        metadata=notification.metadata_json,
     )
 
 
@@ -254,3 +267,48 @@ async def portal(
         notifications=notifications,
         correlation_id=correlation_id,
     )
+
+
+async def mark_notification_read(
+    db: AsyncSession,
+    actor: Actor,
+    notification_id: UUID,
+    idempotency_key: str | None,
+    correlation_id: UUID,
+) -> Notification:
+    del correlation_id  # The route owns the response correlation ID; persistence stores no payload.
+    if actor.user.kind != "PATIENT" or actor.user.patient_id is None:
+        raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+    notification = await db.get(Notification, notification_id)
+    if notification is None or notification.patient_id != actor.user.patient_id:
+        raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+
+    key = _require_key(idempotency_key)
+    path = f"/portal/notifications/{notification_id}/read"
+    fingerprint = request_fingerprint(str(actor.user.id), "POST", path, {})
+    existing = await _idempotency(db, actor, key, fingerprint, "POST", path)
+    if existing:
+        replay = await db.get(Notification, existing.resource_id)
+        if replay is None or replay.patient_id != actor.user.patient_id:
+            raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+        return replay
+
+    if notification.seen_at is None:
+        notification.seen_at = clock.now()
+    db.add(
+        IdempotencyRecord(
+            id=uuid4(),
+            actor_id=actor.user.id,
+            key=key,
+            fingerprint=fingerprint,
+            method="POST",
+            path=path,
+            resource_type="notification",
+            resource_id=notification.id,
+            status_code=200,
+            created_at=clock.now(),
+        )
+    )
+    await db.commit()
+    await db.refresh(notification)
+    return notification

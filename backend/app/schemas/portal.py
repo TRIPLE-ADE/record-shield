@@ -91,3 +91,12 @@ class PortalResponse(StrictPortalModel):
     access: PortalAccessPage
     notifications: PortalNotificationsPage
     correlation_id: UUID
+
+
+class NotificationReadRequest(StrictPortalModel):
+    pass
+
+
+class NotificationReadResponse(StrictPortalModel):
+    notification: NotificationView
+    correlation_id: UUID

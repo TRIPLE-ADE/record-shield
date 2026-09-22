@@ -6,7 +6,7 @@ This is the implementation companion to **RecordShield PRD and Architecture v1.0
 
 ## Scope and precedence
 
-All 28 method/path operations from PRD section 12.1 are covered, splitting the events/alerts shorthand into separate operations. Five necessary read/initialization additions make **33 operations total**: `GET /auth/csrf` bootstraps login protection; `GET /consent/requests` gives the requesting clinician the approved grant ID; `GET /emergency/sessions/{id}` supports state and justification review; and GET versions of the two admin configuration routes supply current values and versions before edits. These additions are explicitly labeled in each operation. No national identity lookup, guardian consent, registration, remote-write, bulk-export, clinical-delete, public policy-evaluation, FHIR or offline-exchange endpoint is added. Private adapter methods remain in-process interfaces, described at the end. Patient, ward and verified-member selectors use the synthetic seed catalog; a general patient or practitioner directory is not added.
+The contract currently lists **37 public method/path operations** in its endpoint index. The three frontend workflow additions at the end are `GET /patients/{id}/context`, `GET /worklist`, and `POST /portal/notifications/{id}/read`: patient context resolves non-clinical visits in the caller's scope, worklist returns the caller's outstanding actions, and notification acknowledgement updates only the patient owner's notification state. The earlier read/initialization additions include `GET /auth/csrf`, `GET /consent/requests`, `GET /emergency/sessions/{id}`, and GET versions of the two admin configuration routes. These additions are explicitly labeled in each operation. No national identity lookup, guardian consent, registration, remote-write, bulk-export, clinical-delete, public policy-evaluation, FHIR or offline-exchange endpoint is added. Private adapter methods remain in-process interfaces, described at the end. Patient, ward and verified-member selectors use the synthetic seed catalog; a general patient or practitioner directory is not added.
 
 The PRD’s authorization and privacy rules remain authoritative. This contract closes wire-format gaps with explicit **contract defaults**: route IDs mean canonical UUIDs; membership selection on login is server-validated; state transitions use integer versions; emergency reads distinguish summary from expanded records; context assignment creation and revision share one route; portal sections have independent cursors; all newly defined enum spellings, payload subtypes, lengths, status choices and error codes are fixed below. These defaults do not expand clinical permissions. Where the PRD gave a generic body description, the exact schema here is the implementation target.
 
@@ -88,6 +88,10 @@ Emergency Summary uses eight fixed sections; UNKNOWN with empty items means no r
 
 | 05A | GET | `/api/v1/patients` | 200 |
 
+| 05B | GET | `/api/v1/patients/{id}/context` | 200 |
+
+| 05C | GET | `/api/v1/worklist` | 200 |
+
 | 05 | GET | `/api/v1/patients/{id}/records/{domain}` | 200 |
 
 | 06 | POST | `/api/v1/patients/{id}/records/{domain}` | 201 |
@@ -125,6 +129,8 @@ Emergency Summary uses eight fixed sections; UNKNOWN with empty items means no r
 | 22 | POST | `/api/v1/emergency/sessions/{id}/revoke` | 200 |
 
 | 23 | GET | `/api/v1/portal` | 200 |
+
+| 23A | POST | `/api/v1/portal/notifications/{id}/read` | 200 |
 
 | 24 | GET | `/api/v1/security/events` | 200 |
 

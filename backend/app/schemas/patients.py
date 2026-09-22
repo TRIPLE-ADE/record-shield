@@ -2,8 +2,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.portal import COMPLETENESS_NOTICE
-from app.schemas.records import SourceView
+from app.schemas.portal import COMPLETENESS_NOTICE, PatientSummary
+from app.schemas.records import EncounterView, SourceView
 
 
 class StrictPatientModel(BaseModel):
@@ -28,3 +28,11 @@ class PatientDirectoryCollection(StrictPatientModel):
     completeness_notice: str = Field(
         default=COMPLETENESS_NOTICE, min_length=1, max_length=400
     )
+
+
+class PatientContext(StrictPatientModel):
+    patient: PatientSummary
+    encounters: list[EncounterView]
+    can_request_records: bool
+    can_activate_emergency: bool
+    correlation_id: UUID
