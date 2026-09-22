@@ -1,5 +1,6 @@
 "use client";
 
+import { apiCapabilities } from "@/lib/api/capabilities";
 import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { isTreatingPractitioner } from "@/utils/authorization";
@@ -34,6 +35,14 @@ export default function ExchangePage({ patientId }: ExchangePageProps) {
     );
   }
 
+  if (!apiCapabilities.patientContext)
+    return (
+      <ExchangeWorkspace
+        patientId={patientId}
+        organizationName={context.organization.name}
+        encounters={[]}
+      />
+    );
   if (patient.isPending) return <ExchangeLoading />;
   if (patient.error || !patient.data?.can_request_records)
     return (

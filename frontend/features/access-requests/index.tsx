@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-rows";
+
 import { redirect } from "next/navigation";
 import { useSession } from "@/hooks/auth";
 import { ApiError } from "@/lib/api/client";
@@ -19,7 +21,7 @@ export default function AccessRequestsPage() {
         </p>
       </header>
       {session.isPending ? (
-        <output>Loading your requests…</output>
+        <LoadingRows label="Loading your requests…" />
       ) : session.data && isTreatingPractitioner(session.data.role) ? (
         <section className="rounded-xl border border-border bg-card">
           <AccessRequestList />

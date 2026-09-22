@@ -1,3 +1,4 @@
+import { LoadingRows } from "@/components/loading-rows";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function WorkspaceLoading() {
@@ -11,9 +12,11 @@ export function WorkspaceLoading() {
         <Skeleton className="h-10 w-80 max-w-full" />
         <Skeleton className="h-5 w-full max-w-2xl" />
       </div>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(20rem,0.7fr)]">
-        <Skeleton className="h-64 rounded-xl" />
-        <Skeleton className="h-64 rounded-xl" />
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div aria-hidden="true" className="border-b border-border p-5">
+          <Skeleton className="h-5 w-40" />
+        </div>
+        <LoadingRows label="Loading patients…" />
       </div>
     </main>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { DowntimeLoading } from "./components/downtime-loading";
 import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { apiMode } from "@/lib/api/bootstrap";
@@ -19,15 +20,7 @@ export default function DowntimePage() {
   const demoStatus = useDemoStatus({ enabled: isDemo && session.data?.role === "SECURITY_ADMIN" });
 
   if (session.error instanceof ApiError && session.error.status === 401) redirect("/login");
-  if (session.isPending) {
-    return (
-      <DowntimeState
-        title="Loading resilience controls"
-        description="Checking your account permissions."
-        kind="unavailable"
-      />
-    );
-  }
+  if (session.isPending) return <DowntimeLoading />;
   if (!session.data || session.data.role !== "SECURITY_ADMIN" || !session.data.organization) {
     return (
       <DowntimeState

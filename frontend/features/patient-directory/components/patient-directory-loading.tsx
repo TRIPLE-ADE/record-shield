@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-rows";
+
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function PatientDirectoryLoading() {
@@ -13,10 +15,11 @@ export function PatientDirectoryLoading() {
         <Skeleton className="h-11 w-72" />
         <Skeleton className="h-5 w-full max-w-xl" />
       </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-52 rounded-xl" />
-        ))}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div aria-hidden="true" className="border-b border-border p-5">
+          <Skeleton className="h-5 w-40" />
+        </div>
+        <LoadingRows label="Loading patients…" />
       </div>
     </main>
   );

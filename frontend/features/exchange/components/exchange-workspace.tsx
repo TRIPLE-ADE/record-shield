@@ -88,7 +88,15 @@ export function ExchangeWorkspace({
         </li>
       </ol>
       <section className="mt-6">
-        <SourceRequestPanel patientId={patientId} receivingEncounterId={receivingEncounterId} />
+        {receivingEncounterId ? (
+          <SourceRequestPanel patientId={patientId} receivingEncounterId={receivingEncounterId} />
+        ) : (
+          <p className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
+            New sharing requests need a verified open visit. Visit selection is not available from
+            the connected service yet. You can still review existing requests and approved records
+            below.
+          </p>
+        )}
       </section>
       <section className="mt-7 grid gap-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <RequestStatusPanel requests={requests} />

@@ -1,5 +1,8 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-rows";
+
+import { apiCapabilities } from "@/lib/api/capabilities";
 import type { Encounter } from "@/lib/api/contracts/records";
 import { VisitSelect } from "@/components/visit-select";
 import { Button } from "@/components/ui/button";
@@ -30,7 +33,13 @@ export function CareVisitPanel({
           ? "These records come from your hospital’s connected record system. Update them in that system."
           : "Record care in this hospital. New entries are saved to the selected visit with your name and the time recorded."}
       </p>
-      {error ? (
+      {!apiCapabilities.patientContext ? (
+        <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
+          Visit selection is not available from the connected service yet. You can review records,
+          but adding entries and starting visit-based sharing or emergency access are unavailable
+          until visits can be verified.
+        </p>
+      ) : error ? (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border p-4">
           <p role="alert" className="text-sm">
             We couldn’t verify the current visits. New entries are unavailable until visits can be
@@ -41,7 +50,7 @@ export function CareVisitPanel({
           </Button>
         </div>
       ) : loading ? (
-        <output className="block text-sm text-muted-foreground">Loading current visits…</output>
+        <LoadingRows label="Loading current visits…" rows={1} />
       ) : encounters.length ? (
         <VisitSelect
           encounters={encounters}

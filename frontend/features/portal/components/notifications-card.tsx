@@ -1,5 +1,6 @@
 "use client";
 
+import { apiCapabilities } from "@/lib/api/capabilities";
 import type { Notification } from "@/lib/api/contracts/exchange";
 import { useMarkNotificationRead } from "@/hooks/exchange";
 import { formatDomain, formatUtcDate } from "@/utils/formatters";
@@ -24,6 +25,11 @@ export function NotificationsCard({ notifications }: { notifications: Notificati
         <CardDescription>{unread ? `${unread} unread` : "You’re up to date"}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 px-5 pb-5">
+        {!apiCapabilities.notificationRead ? (
+          <p className="text-xs text-muted-foreground">
+            Notifications are view-only. Marking them as read is not available yet.
+          </p>
+        ) : null}
         {notifications.length ? (
           <ul className="space-y-4" aria-label="Notifications">
             {notifications.map((notification) => (
@@ -42,7 +48,7 @@ export function NotificationsCard({ notifications }: { notifications: Notificati
                 ) : null}
                 {notification.seen_at ? (
                   <p className="mt-2 text-xs text-muted-foreground">Read</p>
-                ) : (
+                ) : apiCapabilities.notificationRead ? (
                   <Button
                     className="mt-2"
                     size="sm"
@@ -54,7 +60,7 @@ export function NotificationsCard({ notifications }: { notifications: Notificati
                       ? "Saving…"
                       : "Mark as read"}
                   </Button>
-                )}
+                ) : null}
               </li>
             ))}
           </ul>

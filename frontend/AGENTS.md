@@ -28,7 +28,7 @@ app/(workspace)/workspace/patients/[id]/exchange/page.tsx -> features/exchange
 app/(workspace)/workspace/patients/[id]/emergency/page.tsx -> features/emergency
 app/(workspace)/workspace/downtime/page.tsx -> features/downtime
 app/(portal)/portal/page.tsx          -> features/portal
-app/api/v1/[...path]/route.ts        -> demo HTTP transport only
+app/api/v1/[...path]/route.ts        -> same-origin live gateway or explicit mock transport
 ```
 
 Global server-state hooks live in `hooks/`, grouped by domain so every feature consumes the same
@@ -93,13 +93,13 @@ feature component
   -> feature hook
   -> feature API function
   -> lib/api/client.ts
-  -> /api/v1 mock route now, real service later
+  -> /api/v1 same-origin gateway (live) or mock route
 ```
 
 - `lib/api/contracts/` contains closed Zod schemas and inferred types. Parse every API response before it reaches a component or query cache.
 - `lib/api/client.ts` owns credentials, CSRF, idempotency keys, response normalization, and safe `ApiError` conversion. Components must not call Axios directly.
 - `lib/mock-api/` is the contract-faithful demo backend. The browser uses the Next catch-all route; Vitest installs Axios Mock Adapter against the same service behavior. Do not create ad-hoc fixture responses inside components or tests.
-- `NEXT_PUBLIC_API_URL` switches the Axios client to the real service. Feature components and query hooks must not need a rewrite when that value changes.
+- `NEXT_PUBLIC_API_URL=/api/v1` and server-only `RECORDSHIELD_BACKEND_URL` select the live gateway. Both empty select mocks. Feature components and query hooks must not need a rewrite when that value changes.
 - React Query owns server state and protected cache lifetime. Clear protected query data on logout, authentication failure, expiry, denial, revocation, or a failed final authorization decision. Do not persist clinical queries to browser storage.
 - React Hook Form owns form state and Zod resolvers own validation. Keep field errors close to their fields.
 - Prefer local component state, feature hooks, and composition. Avoid prop drilling by placing behavior beside the feature that owns it. Do not add Zustand, Context, or another global store unless a real cross-route client-state requirement is demonstrated.

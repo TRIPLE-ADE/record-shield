@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-rows";
+
 import Link from "next/link";
 import type { SessionContext } from "@/lib/api/contracts/auth";
 import { usePatientDirectory } from "@/hooks/patients";
@@ -33,7 +35,7 @@ export function AssignedPatients({ context }: { context: SessionContext }) {
         </Link>
       </div>
       {query.isPending ? (
-        <output className="p-5 text-sm text-muted-foreground">Loading your patients…</output>
+        <LoadingRows label="Loading your patients…" />
       ) : query.error ? (
         <div role="alert" className="p-5">
           <p className="text-sm">Your patient list is unavailable.</p>

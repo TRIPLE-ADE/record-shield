@@ -18,7 +18,9 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm doctor",
-    "doctor": "npx react-doctor@latest --verbose"
+    "doctor": "npx react-doctor@latest --verbose",
+    "test:gateway": "node --test lib/api/server/*.node.test.mjs",
+    "test:live": "playwright test --config playwright.live.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

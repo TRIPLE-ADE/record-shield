@@ -13,7 +13,7 @@ const capabilities = [
     icon: NotePencilIcon,
     title: "A place for everyday care",
     description:
-      "Find a patient, choose a visit, and record observations. Keep the hospital’s own care history together.",
+      "Find a patient, choose a visit, and record observations. Keep the hospital's own care history together.",
   },
   {
     icon: UsersThreeIcon,
@@ -32,12 +32,12 @@ const questions = [
   {
     question: "Do we need to replace our hospital software?",
     answer:
-      "RecordShield is designed for two paths: an adapter connects a hospital’s existing electronic medical record, while RecordShield’s lightweight EMR supports facilities starting without one. The current preview demonstrates both paths with simulated hospital systems.",
+      "RecordShield is designed for two paths: an adapter connects a hospital's existing electronic medical record, while RecordShield’s lightweight EMR supports facilities starting without one. The current preview demonstrates both paths with simulated hospital systems.",
   },
   {
     question: "Who decides which records a clinician can see?",
     answer:
-      "Access is evaluated using the clinician’s identity, role, shift, care assignment and the records requested. Routine sharing between hospitals also requires the patient’s scoped approval. Being signed in does not grant access to every patient.",
+      "Access is evaluated using the clinician's identity, role, shift, care assignment and the records requested. Routine sharing between hospitals also requires the patient’s scoped approval. Being signed in does not grant access to every patient.",
   },
   {
     question: "What happens in an emergency?",
@@ -52,7 +52,7 @@ const questions = [
   {
     question: "Can we use the preview for real patient care?",
     answer:
-      "The current product is a working frontend preview backed by a simulated API and fictional data. Real hospital use requires backend integration, identity verification and operational validation. Please use only the supplied sample accounts and fictional information.",
+      "The current product is a working preview using fictional data. Real hospital use requires completed integrations, identity verification and operational validation. Please use only the supplied sample accounts and fictional information.",
   },
 ];
 
@@ -72,7 +72,7 @@ export function ProductSections() {
                 Clearer responsibility.
               </h2>
               <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground">
-                Care doesn’t stop at a hospital’s front door. RecordShield brings local
+                Care doesn't stop at a hospital's front door. RecordShield brings local
                 documentation, controlled sharing, and access oversight into one product.
               </p>
             </div>

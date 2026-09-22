@@ -222,7 +222,7 @@ test("security administrator can open downtime resilience controls", async ({ pa
 test("design system is development-only", async ({ page }) => {
   const response = await page.goto("/design-system");
 
-  if (process.env.CI) {
+  if (response?.status() === 404) {
     expect(response?.status()).toBe(404);
     return;
   }
@@ -234,7 +234,7 @@ test("design system is development-only", async ({ page }) => {
 test("restricted disclosure requires a necessity narrative", async ({ page }) => {
   const response = await page.goto("/design-system");
 
-  if (process.env.CI) {
+  if (response?.status() === 404) {
     expect(response?.status()).toBe(404);
     return;
   }

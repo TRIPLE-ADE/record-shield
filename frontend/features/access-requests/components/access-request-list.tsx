@@ -1,5 +1,7 @@
 "use client";
 
+import { LoadingRows } from "@/components/loading-rows";
+
 import { useSession } from "@/hooks/auth";
 import { usePatientDirectory } from "@/hooks/patients";
 import { useCurrentTime } from "@/hooks/use-current-time";
@@ -60,7 +62,7 @@ export function AccessRequestList({ compact = false }: { compact?: boolean }) {
         </div>
       ) : null}
       {requests.isPending ? (
-        <output className="p-5 text-sm text-muted-foreground">Loading access requests…</output>
+        <LoadingRows label="Loading access requests…" />
       ) : requests.error ? (
         <div role="alert" className="p-5">
           <p className="text-sm">

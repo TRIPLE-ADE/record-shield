@@ -1,5 +1,6 @@
 "use client";
 
+import { apiCapabilities } from "@/lib/api/capabilities";
 import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api/client";
 import { useSession } from "@/hooks/auth";
@@ -25,6 +26,10 @@ export default function EmergencyPage({ patientId }: EmergencyPageProps) {
     );
   }
 
+  if (!apiCapabilities.patientContext)
+    return (
+      <EmergencyDenied description="The connected service does not provide current visits yet. Starting emergency access requires a verified emergency visit." />
+    );
   if (patient.isPending) return <EmergencyLoading />;
   if (patient.error || !patient.data?.can_activate_emergency)
     return (

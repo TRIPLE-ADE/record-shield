@@ -12,3 +12,5 @@ export { CorrectionDialog } from "./correction-dialog";
 export { RecordErrorState } from "./record-error-state";
 export { PatientRecordsState } from "./patient-records-state";
 export { PatientRecordsLoading } from "./patient-records-loading";
+export { PatientRecordsContent } from "./patient-records-content";
+export { PatientRecordsWorkspace } from "./patient-records-workspace";

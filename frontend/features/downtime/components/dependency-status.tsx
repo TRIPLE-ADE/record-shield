@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircleIcon, CloudSlashIcon, WifiHighIcon } from "@phosphor-icons/react";
+import { QuestionIcon, CheckCircleIcon, CloudSlashIcon, WifiHighIcon } from "@phosphor-icons/react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { DemoDependency, DemoStatus } from "@/lib/api/contracts/demo";
@@ -8,15 +8,18 @@ import { dependencyLabels } from "../utils/format";
 
 export function DependencyStatus({ demoStatus }: { demoStatus?: DemoStatus }) {
   const online = typeof navigator === "undefined" ? true : navigator.onLine;
-  const entries: Array<[DemoDependency, { available: boolean; label: string }]> = demoStatus
+  const entries: Array<[DemoDependency, { available: boolean | null; label: string }]> = demoStatus
     ? (Object.entries(demoStatus.dependencies) as Array<
-        [DemoDependency, { available: boolean; label: string }]
+        [DemoDependency, { available: boolean | null; label: string }]
       >)
     : (["SOURCE", "CONSENT", "AUDIT"] as const).map(
         (dependency) =>
           [
             dependency,
-            { available: online, label: online ? "Available" : "Browser offline" },
+            {
+              available: online ? null : false,
+              label: online ? "Not verified" : "Browser offline",
+            },
           ] as const,
       );
 
@@ -51,7 +54,9 @@ export function DependencyStatus({ demoStatus }: { demoStatus?: DemoStatus }) {
           <div key={dependency} className="rounded-lg border border-border/70 bg-muted/30 p-3">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">{dependencyLabels[dependency]}</p>
-              {status.available ? (
+              {status.available === null ? (
+                <QuestionIcon aria-hidden="true" className="size-4 text-muted-foreground" />
+              ) : status.available ? (
                 <CheckCircleIcon
                   aria-hidden="true"
                   className="size-4 text-success"
