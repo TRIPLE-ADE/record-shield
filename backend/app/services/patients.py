@@ -9,11 +9,17 @@ from app.api.v1.dependencies import Actor
 from app.core import clock
 from app.core.errors import ApiError
 from app.core.primitives import decode_cursor, encode_cursor
-from app.models import Encounter, Organization, Patient
-from app.schemas.patients import PatientDirectoryCollection, PatientDirectoryEntry
+from app.models import Encounter, HospitalPolicy, Organization, Patient
+from app.schemas.patients import PatientContext, PatientDirectoryCollection, PatientDirectoryEntry
+from app.schemas.portal import PatientSummary
+from app.services.context import emergency_policy
+from app.services.local_workspace import encounter_view
 from app.services.policy import (
+    EMERGENCY_PLATFORM_ROLES,
     STAFF_CLINICAL_ROLES,
     TASK_TYPE_FOR_ROLE,
+    evaluate_emergency_eligibility,
+    evaluate_local_domain,
 )
 
 
@@ -167,4 +173,76 @@ async def list_patients(
         next_cursor=next_cursor,
         correlation_id=correlation_id,
         retrieved_at=clock.z(clock.now()),
+    )
+
+
+async def get_patient_context(
+    db: AsyncSession,
+    actor: Actor,
+    patient_id: UUID,
+    correlation_id: UUID,
+) -> PatientContext:
+    """Return non-clinical visit context only after resolving the caller's current scope."""
+    patient_ids = await _authorized_patient_ids(db, actor)
+    patient = await db.scalar(
+        select(Patient).where(
+            Patient.id == patient_id,
+            Patient.organization_id == actor.organization_id,
+        )
+    )
+    if patient is None or patient_id not in patient_ids:
+        raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+    organization = await db.get(Organization, actor.organization_id)
+    if organization is None or organization.status == "SUSPENDED":
+        raise ApiError(404, "NOT_FOUND", "The requested resource was not found.")
+
+    rows = (
+        await db.scalars(
+            select(Encounter)
+            .where(
+                Encounter.patient_id == patient_id,
+                Encounter.organization_id == actor.organization_id,
+                Encounter.status == "OPEN",
+            )
+            .order_by(Encounter.started_at.desc(), Encounter.id.asc())
+        )
+    ).all()
+    encounters = [encounter_view(row, patient) for row in rows]
+
+    can_request_records = any(
+        evaluate_local_domain(
+            actor.context.policy, "R", "demographics", patient_id, row.ward_id
+        ).allowed
+        for row in rows
+    )
+    can_activate_emergency = False
+    if (
+        rows
+        and any(row.encounter_type == "EMERGENCY" for row in rows)
+        and actor.membership is not None
+        and actor.membership.role in EMERGENCY_PLATFORM_ROLES
+    ):
+        policy = await db.scalar(
+            select(HospitalPolicy).where(HospitalPolicy.organization_id == actor.organization_id)
+        )
+        if policy is not None and actor.context is not None:
+            receiving = emergency_policy(policy)
+            can_activate_emergency = evaluate_emergency_eligibility(
+                actor.context.policy,
+                actor.membership.id,
+                receiving,
+                receiving,
+            ).allowed
+
+    return PatientContext(
+        patient=PatientSummary(
+            patient_id=patient.id,
+            health_id=f"RSH-{patient.id}",
+            name=patient.display_name,
+            date_of_birth=patient.date_of_birth or "",
+        ),
+        encounters=encounters,
+        can_request_records=can_request_records,
+        can_activate_emergency=can_activate_emergency,
+        correlation_id=correlation_id,
     )

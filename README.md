@@ -1,10 +1,10 @@
 # RecordShield
 
-RecordShield helps hospitals share the right patient information at the right time without losing control of access.
+RecordShield helps hospitals to secure their patient record while they share with other hospitals the right patient information at the right time without losing control of access.
 
 ## The problem
 
-Patient information is often split between hospital systems. Clinicians need useful context during care, patients need a say in routine sharing, and emergency access must be limited, explainable, and reviewable. Facilities without a full EMR also need a safe way to participate.
+Patient information is often split between hospital systems. Also, the existing EMR provides limited security to patient records. Clinicians need useful context during care, patients need a say in routine sharing, and emergency access must be limited, explainable, and reviewable. Facilities without a full EMR also need a safe way to participate.
 
 ## The solution
 

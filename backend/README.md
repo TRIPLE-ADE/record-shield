@@ -11,9 +11,9 @@ Implemented routes include:
 - Health: `GET /api/v1/health`
 - Authentication: CSRF bootstrap, login, logout, and `GET /api/v1/me`
 - Local workspace: encounters, local record list/create, and record correction
-- Patient directory: `GET /api/v1/patients`, scoped to the authenticated staff context
+- Patient context: `GET /api/v1/patients`, `GET /api/v1/patients/{id}/context`, and `GET /api/v1/worklist`, scoped to the authenticated staff context
 - Exchange and consent: source discovery, consent requests, grants, revocation, and read-only remote records
-- Patient portal: `GET /api/v1/portal`
+- Patient portal: `GET /api/v1/portal` and `POST /api/v1/portal/notifications/{id}/read`
 - Emergency access: activation, summary read, expansion, justification, status and revocation
 - Security: `GET /api/v1/security/events`, `POST /api/v1/security/chains/{id}/verify`, alerts list and review
 - Administration: context assignments, hospital policy, suspensions
