@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const suspensionFormSchema = z.object({
   target_type: z.enum(["ORGANIZATION", "MEMBERSHIP"]),
-  target_id: z.string().uuid(),
+  target_id: z.uuid(),
   reason: z.string().trim().min(20, "Explain why this target must be suspended."),
 });
 

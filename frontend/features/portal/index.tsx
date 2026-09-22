@@ -1,6 +1,7 @@
 "use client";
 
 import { redirect, useRouter } from "next/navigation";
+import { getApiErrorMessage } from "@/lib/api/errors";
 import { ApiError } from "@/lib/api/client";
 import { useLogout, useSession } from "@/hooks/auth";
 import { usePortal } from "@/hooks/exchange";
@@ -25,7 +26,9 @@ export default function PortalPage() {
   }
   if (portal.isPending) return <PortalLoading />;
   if (portal.error) {
-    return <PortalState title="Portal unavailable" description={portal.error.message} />;
+    return (
+      <PortalState title="Portal unavailable" description={getApiErrorMessage(portal.error)} />
+    );
   }
   if (!portal.data) {
     return (

@@ -86,6 +86,14 @@ Landing-page verification: visually reviewed the desktop preview; all 15 browser
 
 ## Live backend integration
 
+### Update: previously missing endpoints are now connected
+
+The deployed OpenAPI now includes GET `/patients/{id}/context`, GET `/worklist`, and POST `/portal/notifications/{id}/read`. The frontend enables all three capabilities and forwards them through the same-origin gateway. Existing visit selection, care-entry permissions, sharing/emergency eligibility, action queues and notification acknowledgement use their existing feature hooks and schemas. Worklist pagination accepts an omitted `next_cursor` as `null`, matching the updated backend contract. No new UI workflow or API redesign is required for these additions; backend authorization remains authoritative.
+
+Verification of this update: live patient-context and worklist responses pass the frontend schemas, and all three live browser checks pass. Notification acknowledgement is connected and contract-checked; a live notification mutation was not performed. Also passed: 55 component/API tests, 8 gateway tests, 15 mock browser journeys with a production build, formatting, lint and TypeScript. React Doctor remains 93/100 with two existing complexity warnings.
+
+The initial assessment below is historical: its missing-endpoint restrictions have been superseded by this update. Registration, visit-closing and reference-directory milestones remain separate work.
+
 Updated 22 September 2026 against the deployed [OpenAPI specification](https://34-237-67-194.sslip.io/openapi.json) and the backend source in this repository. The deployed schema contains 32 paths / 36 operations; one operation is the internal infrastructure probe and is intentionally excluded from the frontend gateway. This section supersedes earlier statements that all mock-backed workflows are available live.
 
 ### Connection and compatibility
@@ -129,7 +137,6 @@ These three endpoints already exist in the frontend mock contract but are absent
 Live API checks have confirmed health, synthetic staff login, patient directory and local demographics/request reads. The tested staff directory returned one patient and that patient's demographics collection was empty; the frontend must not imply that missing records exist. Live browser checks passed for clinician sign-in/directory/records, patient portal, security event/alert reads and sign-out. Live checks avoid clinical, consent, emergency, policy and suspension mutations; those require a coordinated synthetic-data acceptance run before hospital deployment. Backend authorization and persistence readiness remain backend responsibilities, not properties established by a frontend build.
 
 Verification: 55 Vitest component/API tests, 7 gateway tests and all 15 isolated mock browser journeys pass. The three opt-in live browser journeys pass. Lint, formatting, TypeScript and the production build with live configuration pass. React Doctor scores 92/100 with four screen-complexity warnings (three existing, one in the Home capability branch); no correctness or accessibility diagnostics were reported. These maintainability warnings do not change backend acceptance requirements.
-
 
 ### Loading-state polish
 

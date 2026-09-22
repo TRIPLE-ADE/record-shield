@@ -14,8 +14,8 @@ export const demoDependencyStatusSchema = z.strictObject({
 });
 
 export const demoStatusSchema = z.strictObject({
-  run_id: z.string().uuid(),
-  reset_at: z.string().datetime({ offset: false }),
+  run_id: z.uuid(),
+  reset_at: z.iso.datetime({ offset: false }),
   dependencies: z.record(demoDependencySchema, demoDependencyStatusSchema),
 });
 

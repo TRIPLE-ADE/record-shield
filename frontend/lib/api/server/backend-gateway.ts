@@ -4,13 +4,15 @@ const cookieNames = new Set(["rs_session", "rs_preauth"]);
 const supportedRoutes: Array<[string, RegExp]> = [
   [
     "GET",
-    /^\/(health|auth\/csrf|me|patients|portal|consent\/requests|security\/(events|alerts)|admin\/(context-assignments|hospital-policy))$/,
+    /^\/(health|auth\/csrf|me|patients|portal|worklist|consent\/requests|security\/(events|alerts)|admin\/(context-assignments|hospital-policy))$/,
   ],
   [
     "POST",
     /^\/(auth\/(login|logout)|encounters|consent\/requests|emergency\/sessions|admin\/(context-assignments|suspensions)|downtime\/reconciliations)$/,
   ],
   ["GET|POST", /^\/patients\/[^/]+\/records\/[^/]+$/],
+  ["GET", /^\/patients\/[^/]+\/context$/],
+  ["POST", /^\/portal\/notifications\/[^/]+\/read$/],
   ["PATCH", /^\/records\/[^/]+$/],
   ["GET", /^\/exchange\/patients\/[^/]+\/(sources|records)$/],
   ["POST", /^\/consent\/requests\/[^/]+\/(approve|deny|cancel)$/],

@@ -3312,6 +3312,8 @@ export class MockAuthService {
         recipient_org_id: request.recipient_org_id,
         practitioner_id: request.requesting_practitioner_id,
         request_id: request.id,
+        grant_id: null,
+        status: request.status,
         session_id: null,
         domains,
       },

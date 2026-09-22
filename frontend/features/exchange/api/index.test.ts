@@ -52,6 +52,11 @@ describe("exchange and consent contract flow", () => {
     await login({ username: "musa.patient", password: "synthetic-example-password" });
     const portalBeforeApproval = await getPortal();
     expect(portalBeforeApproval.requests.items[0]?.reason).toContain("current treatment plan");
+    expect(portalBeforeApproval.notifications.items[0]?.metadata).toMatchObject({
+      status: "PENDING",
+      grant_id: null,
+      request_id: created.request.id,
+    });
 
     const approved = await approveConsent({
       requestId: created.request.id,
