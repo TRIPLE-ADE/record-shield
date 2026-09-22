@@ -80,3 +80,11 @@ CI=1 pnpm test:e2e
 ```
 
 Backend checks and service setup are documented in [backend/README.md](backend/README.md).
+
+## Demo
+amina.unity
+
+
+https://github.com/user-attachments/assets/d58ac1d5-980a-4257-844a-37ff2eac1b54
+
+
